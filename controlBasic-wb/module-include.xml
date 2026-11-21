@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Default view registration. default="true" plus AgentOn.Preference.PREFERRED
+  makes this the view Workbench opens on double-click.
+  Template: HawkenIndustries/Niagara4-ResoluteTagUtils BImportExportManager
+-->
+<types>
+  <type class="com.controlbasic.ui.BControlBasicEditor" name="ControlBasicEditor">
+    <agent default="true">
+      <on type="controlBasic:ControlBasicBlock"/>
+    </agent>
+  </type>
+</types>

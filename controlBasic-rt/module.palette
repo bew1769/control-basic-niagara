@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Workbench palette. Same bajaObjectGraph shape as
+  ci-richard-mcelhinney/nhaystack nhaystack-wb/module.palette.
+-->
+<bajaObjectGraph version="1.0">
+<p h="1" m="b=baja" t="b:UnrestrictedFolder">
+  <p n="ControlBasicBlock" m="cb=controlBasic" t="cb:ControlBasicBlock"/>
+</p>
+</bajaObjectGraph>

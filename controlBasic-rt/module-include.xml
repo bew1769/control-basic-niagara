@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Type index for the runtime module part.
+  The annotation processor refreshes this file during a Niagara build.
+  Template: ci-richard-mcelhinney/nhaystack module-include.xml
+-->
+<types>
+  <type class="com.controlbasic.BControlBasicBlock" name="ControlBasicBlock"/>
+</types>

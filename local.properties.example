@@ -1,0 +1,13 @@
+# Copy to local.properties. This file is an example and contains no secrets.
+# local.properties is gitignored.
+
+# Niagara 4.10 or newer install used to compile the module.
+niagara_home=C:\\Niagara\\Niagara-4.14.0.142
+niagara_user_home=C:\\Users\\you\\Niagara\\tridium\\4.14.0.142
+
+# Optional when the Gradle plugins are not under niagara_home/etc/m2/repository.
+# gradlePluginHome=C:\\Niagara\\Niagara-4.14.0.142\\etc\\m2\\repository
+
+# Produced by scripts/generate-dev-cert.sh. Do not commit the generated profile.
+certAlias=controlbasic
+niagara.signing.profile=security/niagara.signing.xml

@@ -1,0 +1,19 @@
+# Control Basic lexicon. Keys are module.type and module.type.slot.
+
+controlBasic=Control Basic
+controlBasic.ControlBasicBlock=Control Basic Block
+controlBasic.ControlBasicBlock.program=Program
+controlBasic.ControlBasicBlock.scanInterval=Scan Interval
+controlBasic.ControlBasicBlock.maxInstructions=Max Instructions Per Scan
+controlBasic.ControlBasicBlock.enabled=Enabled
+controlBasic.ControlBasicBlock.lastError=Last Error
+controlBasic.ControlBasicBlock.console=Console
+controlBasic.ControlBasicBlock.scanCount=Scan Count
+controlBasic.ControlBasicBlock.slotSummary=Slots
+controlBasic.ControlBasicBlock.table1=Table 1
+controlBasic.ControlBasicBlock.table2=Table 2
+controlBasic.ControlBasicBlock.table3=Table 3
+controlBasic.ControlBasicBlock.table4=Table 4
+controlBasic.ControlBasicBlock.compile=Compile
+controlBasic.ControlBasicBlock.reset=Reset
+controlBasic.ControlBasicEditor=Control Basic Editor

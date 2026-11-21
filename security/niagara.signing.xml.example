@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Example only. scripts/generate-dev-cert.sh writes security/niagara.signing.xml
+  with real values. That file is gitignored. Do not put a password here.
+-->
+<signingProfile>
+  <className>com.tridium.gradle.plugins.signing.profile.RestrictedSigningProfile</className>
+  <alias>controlbasic</alias>
+  <keystoreType>PKCS12</keystoreType>
+  <keystoreFile>/absolute/path/to/security/dev-keystore.p12</keystoreFile>
+  <storePassword>REPLACE_ME</storePassword>
+  <keyPassword>REPLACE_ME</keyPassword>
+  <timestampUrl>http://timestamp.digicert.com</timestampUrl>
+</signingProfile>

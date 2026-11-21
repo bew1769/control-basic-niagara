@@ -1,0 +1,25 @@
+.gradle/
+build/
+**/build/
+local.properties
+.idea/
+*.iml
+*.class
+out/
+
+# Signing material. Example templates under security/ are tracked.
+security/*.p12
+security/*.pfx
+security/*.jks
+security/*.keystore
+security/*.cer
+security/*.pem
+security/*.crt
+security/niagara.signing.xml
+security/niagara.signing.properties
+
+# Niagara build output
+controlBasic-rt/build/
+controlBasic-wb/build/
+*.jar
+!gradle/wrapper/gradle-wrapper.jar

@@ -1,0 +1,7 @@
+REM Scaled damper. Fan command is boolean; damper command is 0..100.
+REM AI1 room temp, VAR1 setpoint, AO1 damper, BO1 fan.
+10 IF FIRST THEN VAR1 = 72
+20 AO1 = LIMIT(SCALE(AI1, 68, 76, 0, 100), 0, 100)
+30 IF AI1 > VAR1 THEN START BO1 ELSE STOP BO1
+40 IF TIMEON(BO1) > 2 * MINUTES THEN AO1 = MIN(AO1, 50)
+50 END
