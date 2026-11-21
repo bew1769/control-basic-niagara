@@ -4,6 +4,8 @@ A Niagara 4 module that runs KMC-style Control Basic on the wire sheet. Drop **C
 
 The interpreter (lexer, parser, compiler, executor) is plain Java with no Niagara jars. Those tests run here. The station and Workbench code compiles when `niagara_home` points at Niagara 4.13 or later.
 
+Niagara SDK jars are not in this repository. Tridium does not publish them. `baja.jar`, `bajaui-wb.jar`, the Gradle plugins, and the rest of the platform come from a Niagara install you are licensed to use. `niagara-stubs` is only a compile stand-in for `./gradlew sanity`. The module jars are built against your install, not against anything shipped here.
+
 ## Layout
 
 | Path | What it is |
