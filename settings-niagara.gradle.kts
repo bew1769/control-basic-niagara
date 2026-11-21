@@ -3,7 +3,7 @@
  *   ./gradlew -c settings-niagara.gradle.kts jar
  *
  * Layout follows ci-richard-mcelhinney/nhaystack settings.gradle.kts
- * (Niagara Gradle plugin 7.6.x, which Tridium documents as building 4.10+).
+ * Niagara 4.13+ Gradle plugin 7.6.x.
  */
 
 import java.util.Properties
@@ -42,7 +42,7 @@ pluginManagement {
 
     if (pluginHome.isNullOrBlank()) {
         throw GradleException(
-            "Set niagara_home (or NIAGARA_HOME) to a Niagara 4.10+ install before building the module. " +
+            "Set niagara_home (or NIAGARA_HOME) to a Niagara 4.13 or later install before building the module. " +
                 "See README.md. Interpreter tests do not need this: ./gradlew test"
         )
     }

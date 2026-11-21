@@ -1,51 +1,56 @@
 # Control Basic in this module
 
-This interpreter follows KMC Controls' Control Basic closely enough to paste the kind of program that runs a small air handler, and it accepts both dialects KMC shipped:
-
-- **Standard Control Basic** uses a line number on each line (`10`, `20`, …). `GOTO` and `GOSUB` target those numbers.
-- **Next Generation / Generation 5** drops required line numbers and uses labels (`AHU_CODE:`) plus block `IF` / `ELSE` / `ENDIF`.
+This interpreter runs line-numbered KMC Control Basic, the form used when a program is pasted in from a KMC controller. Each line starts with a line number (`10`, `20`, …). `GOTO` and `GOSUB` target those numbers. Labels and block `IF` / `ELSE` / `ENDIF` still parse.
 
 Keywords are not case-sensitive. A line may hold several statements separated by `:`. Comments are `REM`, `'` and `//`.
 
 Diagnostics report the **source line in the editor** (the first line of the file is line 1), which is what the Workbench view highlights.
 
-## Slot rule
+## Slot names
 
-Saving a program that compiles rebuilds the block's dynamic slots. A name that is still present keeps its slot object, so links on that slot stay. A name that disappeared is removed. A boolean/numeric type change removes and recreates the slot; that link has to be drawn again. Slots this block created carry the facet `cbSlot=true`. Other dynamic slots on the component are left alone.
+A wire-sheet slot is a KMC object address plus an optional SEBA descriptor:
 
-A failed compile does **not** change slots.
+```text
+AI1
+AI1_RmTmp
+AO2_DprCmd
+AV1_ZnTmpSpt
+BI1_OccSts
+BO1_SaFanCmd
+BV1_SchdOcc
+AI3_CO2_1
+```
 
-Names are case-insensitive. The slot keeps the first spelling in the source (`RoomTemp` and `roomtemp` are one slot).
+The shape is `{prefix}{number}` or `{prefix}{number}_{descriptor}`.
 
-Resolution order:
+| Prefix | BACnet object | Slot |
+| --- | --- | --- |
+| `AI` | analog input | numeric input |
+| `AO` | analog output | numeric output |
+| `AV` | analog value | numeric variable, read and written each scan |
+| `BI` | binary input | boolean input |
+| `BO` | binary output | boolean output |
+| `BV` | binary value | boolean variable, read and written each scan |
 
-1. Built-ins never become slots: `TIME`, `DOW`, `DOM`, `DOY`, `MONTH`, `YEAR`, `SCAN`, `SCANS`, `FIRST`, `HOURS`, `MINUTES`, `SECONDS`, `PI`, `TRUE`, `FALSE`, and the function names.
-2. `FOR` loop indexes are not slots unless you declare them or give them a prefix below.
-3. A declaration wins:
-   - `INPUT a, b` numeric input
-   - `OUTPUT a, b` numeric output
-   - `BINPUT` / `BOOLINPUT` boolean input
-   - `BOUTPUT` / `BOOLOUTPUT` boolean output
-   - `VAR` numeric variable (read and written)
-   - `BVAR` / `BOOL` boolean variable
-4. Otherwise a prefix on the name wins. The prefix is the whole name, or the prefix plus digits, or the prefix plus `_` and more (`AI1`, `IN_ROOM`):
+The descriptor follows Schneider Electric's SEBA naming convention. The abbreviation dictionary is [SEBA Naming Convention](https://bms-applications.schneider-electric.com/seba-naming-convention) (`RmTmp` room temperature, `ZnTmp` zone temperature, `SaFanCmd` supply-air fan command, `OccSts` occupancy status). The combination rules are the SEBA Point Naming Standards published with that site:
 
-   | Prefix | Slot |
-   | --- | --- |
-   | `AI`, `IN` | numeric input |
-   | `AO`, `OUT` | numeric output |
-   | `AV`, `VAR` | numeric variable |
-   | `BI`, `BIN`, `BINPUT` | boolean input |
-   | `BO`, `BOUT`, `BOUTPUT` | boolean output |
-   | `BV`, `BVAR` | boolean variable |
+- Build the name generic-to-specific by concatenating the camel-case abbreviations. `Fcu1` + `Oa` + `Dpr` + `Pos` + `Spt` + `Min` is `Fcu1OaDprPosSptMin`.
+- Put modifiers on the end: `OaDprPosMax`, not `MaxOaDprPos`.
+- A number may suffix an abbreviation: `Ct1Fan`, `CtFan2`, and `Ct1Fan2`.
+- An underscore inside the descriptor is only the enumeration separator used when the abbreviation itself contains digits, as in `CO2_1`.
+- Not every naming level has to appear. `SaFanCmd` is a complete name.
 
-5. Otherwise usage decides. Read and never assigned: numeric input. Assigned and never read: numeric output. Both: numeric variable. `START` / `STOP` / `ENABLE` / `DISABLE` / `OPEN` / `CLOSE` count as boolean writes. If those are the only writes and the name is never used in arithmetic, the slot is boolean.
+`AI1_RoomTemp` is the same shape as `AI1_RmTmp`. The descriptor does not have to be a dictionary token, so a readable camel-case word is accepted. `AI1_Room_Temp` is not a slot: that underscore is not an enumeration, and the name stays an internal variable.
 
-Each scan copies every slot into the program, runs from the top, then writes **outputs and variables** back. Inputs are not written back, so a link keeps driving them. Assigning to a name declared `INPUT` (or prefixed `AI`/`IN`) does not stick past the next scan.
+`INPUT` and `OUTPUT` declarations do not create slots. A `FOR` index does not create a slot. Built-ins (`TIME`, `FIRST`, `HOURS`, function names) do not create slots. Arrays (`DIM`) do not create slots.
 
-Arrays (`DIM`) are internal. They are not slots.
+Names are case-insensitive. The slot keeps the first spelling (`AI1_RmTmp` and `ai1_rmtmp` are one slot).
 
-These names are reserved because the block already has them as properties: `program`, `scanInterval`, `maxInstructions`, `enabled`, `lastError`, `console`, `scanCount`, `slotSummary`, `table1`…`table4`, `status`, `displayName`.
+Niagara slot names are letters, digits, and underscore, and they start with a letter or underscore. The block passes the name through `javax.baja.naming.SlotPath.escape`, which is the `$xx` / `$uxxxx` escaping the Niagara developer guide describes for slot names and `TextUtil`. `AI1_RmTmp` is already valid. A space becomes `$20` and a hyphen becomes `$2d`.
+
+Saving a program that compiles rebuilds dynamic slots. A name that is still present keeps its slot object, so links stay. A name that disappeared is removed. A boolean/numeric type change removes and recreates the slot. Slots this block created carry the facet `cbSlot=true`. A failed compile does not change slots.
+
+Each scan copies every slot into the program, runs from the top, then writes outputs and variables back. Inputs are not written back.
 
 ## Execution model
 
@@ -74,7 +79,7 @@ Highest to lowest, matching the KMC precedence table. Unary minus binds tighter 
 
 ## Statements that run
 
-`LET` (optional), assignment, `A(i) =`, `DIM A(n)` (indexes are 1…n), `IF`, `IF+`, `IF-`, `THEN`, `ELSE`, `ELSEIF`, `ENDIF` / `END IF`, `GOTO`, `GOSUB`, `RETURN`, `FOR` / `TO` / `STEP` / `NEXT`, `ON n GOTO`, `ON n GOSUB`, `ONERROR GOTO`, `ONERROR OFF`, `START`, `STOP`, `ENABLE`, `DISABLE`, `OPEN`, `CLOSE`, `PRINT`, `END`, `HALT`, `REM`, and the slot declarations above.
+`LET` (optional), assignment, `A(i) =`, `DIM A(n)` (indexes are 1…n), `IF`, `IF+`, `IF-`, `THEN`, `ELSE`, `ELSEIF`, `ENDIF` / `END IF`, `GOTO`, `GOSUB`, `RETURN`, `FOR` / `TO` / `STEP` / `NEXT`, `ON n GOTO`, `ON n GOSUB`, `ONERROR GOTO`, `ONERROR OFF`, `START`, `STOP`, `ENABLE`, `DISABLE`, `OPEN`, `CLOSE`, `PRINT`, `END`, `HALT`, `REM`. `INPUT` / `OUTPUT` / `VAR` declarations are accepted and do not create wire-sheet slots.
 
 `IF+` runs the THEN branch only on the scan the condition becomes true. `IF-` runs it only on the scan it becomes false. The first scan treats the previous value as false.
 
@@ -99,8 +104,8 @@ Highest to lowest, matching the KMC precedence table. Unary minus binds tighter 
 | `SENSORON` `SENSOROFF` | 1 on the scan the variable rises or falls. Same idea as KMC `SENSOR-ON` / `IF+`. |
 | `INTERVAL` | `INTERVAL(seconds)` is 1 on the first call and again after that many seconds. Each call site has its own timer. |
 | `PID` | `PID(pv, sp, kp, ki, kd)` or with `outMin, outMax`. Output is not a percent unless you clamp it. Each call site keeps its own integral. Anti-windup drops the last integral step when the output saturates. |
-| `DEWPOINT` `DEWPOINTF` | Magnus approximation. `DEWPOINT(tempC, rhPercent)` returns °C. `DEWPOINTF` takes and returns °F. |
-| `ENTHALPYSI` `ENTHALPY` | Moist-air enthalpy at 101.325 kPa. SI is kJ/kg. `ENTHALPY` multiplies by 0.4299 to approximate Btu/lb. Not a certified psychrometric library. |
+| `DEWPOINT` `DEWPOINTF` | Magnus formula, not a KMC firmware match. `DEWPOINT(tempC, rhPercent)` returns °C. `DEWPOINTF` takes and returns °F. |
+| `ENTHALPYSI` `ENTHALPY` | ASHRAE-style moist-air enthalpy at 101.325 kPa. SI is kJ/kg. `ENTHALPY` multiplies by 0.4299 to approximate Btu/lb. |
 | `RND` | `RND()` is 0..1. `RND(n)` is 0..n. |
 
 Hyphenated KMC spellings are accepted: `TIME-ON`, `TIME-OFF`, `SIN-1`, `COS-1`, `TAN-1`, `DEW-POINT`, `LN-1`, `SENSOR-ON`, `SENSOR-OFF`, `ON-ERROR`.

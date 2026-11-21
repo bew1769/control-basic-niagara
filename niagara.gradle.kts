@@ -12,7 +12,7 @@ plugins {
 }
 
 vendor {
-    defaultVendor("ControlBasic")
+    defaultVendor("bew1769")
     defaultModuleVersion("1.0.0")
 }
 

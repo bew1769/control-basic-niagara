@@ -7,6 +7,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import javax.baja.naming.SlotPath;
 import javax.baja.nre.annotations.NiagaraAction;
 import javax.baja.nre.annotations.NiagaraProperty;
 import javax.baja.nre.annotations.NiagaraType;
@@ -487,7 +488,8 @@ public class BControlBasicBlock extends BComponent {
         flags |= Flags.READONLY;
       }
       BValue value = spec.dataType == SlotDataType.BOOLEAN ? new BStatusBoolean() : new BStatusNumeric();
-      add(spec.name, value, flags, BFacets.make(SLOT_FACET, BBoolean.TRUE), null);
+      String slotName = SlotPath.escape(spec.name);
+      add(slotName, value, flags, BFacets.make(SLOT_FACET, BBoolean.TRUE), null);
     }
   }
 
@@ -560,7 +562,7 @@ public class BControlBasicBlock extends BComponent {
       if (i > 0) {
         text.append(", ");
       }
-      text.append(spec.name).append(' ');
+      text.append(spec.niagaraName).append(' ');
       if (spec.direction == SlotDirection.INPUT) {
         text.append("in");
       } else if (spec.direction == SlotDirection.OUTPUT) {

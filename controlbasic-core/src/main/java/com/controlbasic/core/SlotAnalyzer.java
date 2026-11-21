@@ -3,16 +3,10 @@ package com.controlbasic.core;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 
 /** Decides which identifiers become wire-sheet slots. */
 final class SlotAnalyzer {
-    private static final String[] PREFIXES = {
-            "BINPUT", "BOUTPUT", "BVAR", "BOUT", "BIN", "OUT", "VAR",
-            "AI", "AO", "AV", "BI", "BO", "IN", "BV"
-    };
-
     private final Map<String, Use> uses = new LinkedHashMap<String, Use>();
     private final List<Diagnostic> errors = new ArrayList<Diagnostic>();
     private int order;
@@ -28,9 +22,6 @@ final class SlotAnalyzer {
             if (use.array) {
                 continue;
             }
-            if (use.loop && !use.assigned && use.declared == null && prefix(use.canonical) == null) {
-                continue;
-            }
             if (Functions.isReserved(use.canonical)) {
                 if (use.declared != null || use.assigned) {
                     errors.add(new Diagnostic(use.line, use.column,
@@ -38,33 +29,11 @@ final class SlotAnalyzer {
                 }
                 continue;
             }
-            if (blocked(use.canonical) && (use.declared != null || use.assigned || use.read)) {
-                errors.add(new Diagnostic(use.line, use.column,
-                        use.spelling + " conflicts with a block property"));
+            SlotNames.Point point = SlotNames.parse(use.spelling);
+            if (point == null) {
                 continue;
             }
-            SlotDirection direction;
-            SlotDataType type;
-            Kind prefixed = prefix(use.canonical);
-            if (use.declared != null) {
-                direction = directionOf(use.declared);
-                type = booleanDecl(use.declared) ? SlotDataType.BOOLEAN : SlotDataType.NUMERIC;
-            } else if (prefixed != null) {
-                direction = prefixed.direction;
-                type = prefixed.bool ? SlotDataType.BOOLEAN : SlotDataType.NUMERIC;
-            } else if (!use.assigned && use.read) {
-                direction = SlotDirection.INPUT;
-                type = use.boolWrite && !use.numeric ? SlotDataType.BOOLEAN : SlotDataType.NUMERIC;
-            } else if (use.assigned && !use.read) {
-                direction = SlotDirection.OUTPUT;
-                type = use.boolWrite && !use.numeric ? SlotDataType.BOOLEAN : SlotDataType.NUMERIC;
-            } else if (use.assigned || use.read) {
-                direction = SlotDirection.VARIABLE;
-                type = use.boolWrite && !use.numeric ? SlotDataType.BOOLEAN : SlotDataType.NUMERIC;
-            } else {
-                continue;
-            }
-            specs.add(new SlotSpec(use.spelling, direction, type));
+            specs.add(new SlotSpec(use.spelling, point.direction, point.dataType));
         }
         if (specs.size() > 128) {
             errors.add(new Diagnostic(0, 1, "A program can expose at most 128 slots"));
@@ -119,9 +88,6 @@ final class SlotAnalyzer {
                 for (int n = 0; n < d.names.size(); n++) {
                     Use u = use(d.names.get(n), d.line, d.column);
                     u.declared = d.kind;
-                    if (booleanDecl(d.kind)) {
-                        u.boolWrite = true;
-                    }
                 }
             }
         }
@@ -193,100 +159,6 @@ final class SlotAnalyzer {
             uses.put(key, u);
         }
         return u;
-    }
-
-    private static boolean booleanDecl(Stmt.DeclKind kind) {
-        return kind == Stmt.DeclKind.BINPUT || kind == Stmt.DeclKind.BOUTPUT || kind == Stmt.DeclKind.BVAR;
-    }
-
-    private static SlotDirection directionOf(Stmt.DeclKind kind) {
-        if (kind == Stmt.DeclKind.INPUT || kind == Stmt.DeclKind.BINPUT) {
-            return SlotDirection.INPUT;
-        }
-        if (kind == Stmt.DeclKind.OUTPUT || kind == Stmt.DeclKind.BOUTPUT) {
-            return SlotDirection.OUTPUT;
-        }
-        return SlotDirection.VARIABLE;
-    }
-
-    static Kind prefix(String canonical) {
-        String name = canonical.toUpperCase(Locale.ROOT);
-        for (int i = 0; i < PREFIXES.length; i++) {
-            String p = PREFIXES[i];
-            if (!name.startsWith(p)) {
-                continue;
-            }
-            String rest = name.substring(p.length());
-            if (!(rest.isEmpty() || digits(rest) || (rest.charAt(0) == '_' && rest.length() > 1))) {
-                continue;
-            }
-            return kindForPrefix(p);
-        }
-        return null;
-    }
-
-    private static Kind kindForPrefix(String prefix) {
-        if (prefix.equals("BINPUT") || prefix.equals("BIN") || prefix.equals("BI") || prefix.equals("IN") && false) {
-            return new Kind(SlotDirection.INPUT, true);
-        }
-        if (prefix.equals("BINPUT") || prefix.equals("BIN") || prefix.equals("BI")) {
-            return new Kind(SlotDirection.INPUT, true);
-        }
-        if (prefix.equals("BOUTPUT") || prefix.equals("BOUT") || prefix.equals("BO")) {
-            return new Kind(SlotDirection.OUTPUT, true);
-        }
-        if (prefix.equals("BVAR") || prefix.equals("BV")) {
-            return new Kind(SlotDirection.VARIABLE, true);
-        }
-        if (prefix.equals("AI") || prefix.equals("IN")) {
-            return new Kind(SlotDirection.INPUT, false);
-        }
-        if (prefix.equals("AO") || prefix.equals("OUT")) {
-            return new Kind(SlotDirection.OUTPUT, false);
-        }
-        return new Kind(SlotDirection.VARIABLE, false);
-    }
-
-    private static boolean digits(String rest) {
-        for (int i = 0; i < rest.length(); i++) {
-            char c = rest.charAt(i);
-            if (c < '0' || c > '9') {
-                return false;
-            }
-        }
-        return rest.length() > 0;
-    }
-
-    static boolean blocked(String canonical) {
-        switch (canonical) {
-            case "PROGRAM":
-            case "SCANINTERVAL":
-            case "MAXINSTRUCTIONS":
-            case "ENABLED":
-            case "LASTERROR":
-            case "CONSOLE":
-            case "SCANCOUNT":
-            case "SLOTSUMMARY":
-            case "TABLE1":
-            case "TABLE2":
-            case "TABLE3":
-            case "TABLE4":
-            case "STATUS":
-            case "DISPLAYNAME":
-                return true;
-            default:
-                return false;
-        }
-    }
-
-    static final class Kind {
-        final SlotDirection direction;
-        final boolean bool;
-
-        Kind(SlotDirection direction, boolean bool) {
-            this.direction = direction;
-            this.bool = bool;
-        }
     }
 
     static final class Use {

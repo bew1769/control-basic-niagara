@@ -698,11 +698,11 @@ final class Parser {
 
     private String readFunctionName() {
         Token first = advance();
-        String name = first.text.toUpperCase(Locale.ROOT);
         if (first.type != TokenType.IDENT && !isCallableKeyword(first.type)) {
             throw error(first, "Expected a name");
         }
-        StringBuilder hyphen = new StringBuilder(name);
+        StringBuilder spelling = new StringBuilder(first.text);
+        StringBuilder hyphen = new StringBuilder(first.text.toUpperCase(Locale.ROOT));
         while (check(TokenType.MINUS) && checkAt(1, TokenType.IDENT)) {
             String candidate = hyphen + "-" + tokens.get(i + 1).text.toUpperCase(Locale.ROOT);
             if (!couldBeAlias(candidate)) {
@@ -710,6 +710,7 @@ final class Parser {
             }
             advance();
             Token part = advance();
+            spelling.append('-').append(part.text);
             hyphen.append('-').append(part.text.toUpperCase(Locale.ROOT));
             String resolved = ALIASES.get(hyphen.toString());
             if (resolved != null && !couldBeLongerAlias(hyphen.toString())) {
@@ -717,7 +718,7 @@ final class Parser {
             }
         }
         String resolved = ALIASES.get(hyphen.toString());
-        return resolved == null ? hyphen.toString() : resolved;
+        return resolved == null ? spelling.toString() : resolved;
     }
 
     private static boolean couldBeAlias(String partial) {

@@ -67,7 +67,7 @@ Do this on every Workbench and every station host that will load the module. Tru
 
 For a remote station host (supervisor or JACE), open the platform connection and use Platform Administration → Certificate Management → User Trust Store → Import. Then install the module with Software Manager rather than copying a jar onto the JACE by hand. Software Manager is what registers the module.
 
-The store file under `niagara_user_home/security` has changed names across 4.10–4.15. Prefer the Certificate Management dialog. If you must import from a shell, point `keytool -importcert` at the user trust store shown in that dialog, not at `niagara_home/jre/lib/security/cacerts`.
+The store file under `niagara_user_home/security` is not the same name on every 4.13+ build. Prefer the Certificate Management dialog. If you must import from a shell, point `keytool -importcert` at the user trust store shown in that dialog, not at `niagara_home/jre/lib/security/cacerts`.
 
 ## What the station checks
 

@@ -8,8 +8,8 @@ import com.controlbasic.core.Highlight;
  * Syntax coloring for {@link javax.baja.ui.text.BTextEditor}.
  *
  * <p>This follows the same extension point as {@code javax.baja.ui.text.BJavaSyntax}:
- * a {@link BSyntax} installed with {@code BTextEditor.setSyntax}. Niagara 4.10 through
- * 4.15 color a line at a time. If a local {@code bajaui} declares a different abstract
+ * a {@link BSyntax} installed with {@code BTextEditor.setSyntax}. Niagara 4.13 and
+ * later color a line at a time. If a local {@code bajaui} declares a different abstract
  * method on {@code BSyntax}, change only {@link #colorLine} so it delegates to
  * {@link Highlight}, which is what the runtime parser uses.
  */

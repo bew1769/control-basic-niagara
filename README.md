@@ -2,7 +2,7 @@
 
 A Niagara 4 module that runs KMC-style Control Basic on the wire sheet. Drop **Control Basic Block** from the palette, link numeric and boolean slots, and edit the program in Workbench. The program is recompiled on save, and the block adds or removes linkable slots to match the names the program uses.
 
-The interpreter (lexer, parser, compiler, executor) is plain Java with no Niagara jars. Those tests run here. The station and Workbench code is a thin layer that compiles only when `niagara_home` points at a Niagara 4.10 or newer install.
+The interpreter (lexer, parser, compiler, executor) is plain Java with no Niagara jars. Those tests run here. The station and Workbench code compiles when `niagara_home` points at Niagara 4.13 or later.
 
 ## Layout
 
@@ -16,7 +16,7 @@ The interpreter (lexer, parser, compiler, executor) is plain Java with no Niagar
 | `docs/SIGNING.md` | Keystore, trust store, production certificates. |
 | `examples/damper.cb` | The program a new block starts with. |
 
-Java source and bytecode are Java 8. Niagara 4.10 through 4.15 load Java 8 classes. The Gradle plugin that *builds* the module is the 7.6 line shipped with newer Niagara developer tools; those tools can compile against a 4.10 `niagara_home`. If your install's plugin version is different, set `gradlePluginVersion` in `gradle.properties` to the directory name under `niagara_home/etc/m2/repository/com/tridium/niagara-module/`.
+The module targets Niagara 4.13 and later. Source and bytecode stay Java 8, which is what 4.13 stations load. The build uses the Gradle 7 plugin set shipped with those installs (`com.tridium.niagara`, `com.tridium.vendor`, `com.tridium.niagara-module`, `com.tridium.niagara-signing`). If resolution fails, set `gradlePluginVersion` in `gradle.properties` to the version directory under `niagara_home/etc/m2/repository/com/tridium/niagara-module/`. The vendor string on the jar is `bew1769`.
 
 ## Templates
 
@@ -30,15 +30,11 @@ The module layout follows modules and notes that are already in the open:
 
 `BControlBasicSyntax` is the same kind of hook as `javax.baja.ui.text.BJavaSyntax`: a `BSyntax` installed with `BTextEditor.setSyntax`. Coloring and errors both come from the core lexer and `ControlBasic.compile`, so the red line is the same diagnostic the station stores in `lastError`. If your `bajaui` declares a different abstract method on `BSyntax`, only `BControlBasicSyntax.colorLine` needs to match `BJavaSyntax`. The token rules stay in `Highlight`.
 
-## Slot rule (short)
+## Slot names (short)
 
 Full detail is in [docs/LANGUAGE.md](docs/LANGUAGE.md).
 
-- `AI` / `IN` numeric input, `AO` / `OUT` numeric output, `AV` / `VAR` numeric variable.
-- `BI` / `BIN` boolean input, `BO` / `BOUT` boolean output, `BV` / `BVAR` boolean variable.
-- Or declare them: `INPUT RoomTemp`, `OUTPUT Damper`, `BINPUT Occupied`, `BOUTPUT Fan`.
-- Anything else is an input if the program only reads it, an output if it only writes it, and a variable if it does both. `START` / `STOP` count as boolean writes.
-- Recompiling keeps a slot, and its links, when the name is still there. Names that vanished are removed. A compile error leaves the previous slots in place.
+A slot is a KMC object plus an optional [SEBA](https://bms-applications.schneider-electric.com/seba-naming-convention) descriptor: `AI1`, `AI1_RmTmp`, `AO1_DprCmd`, `BI1_OccSts`, `BO1_SaFanCmd`, `AV1_ZnTmpSpt`, `BV1_SchdOcc`. The prefix sets the type. The descriptor is camel-case SEBA text; an underscore inside it is only the `CO2_1` enumeration form. Other names stay internal. Recompiling keeps a slot, and its links, when the name is still there.
 
 ## 1. Run the interpreter tests
 
@@ -54,14 +50,14 @@ That is `controlbasic-core` only. It does not download Niagara and does not sign
 
 ## 2. Point the build at Niagara
 
-Copy `local.properties.example` to `local.properties` and set:
+Copy `local.properties.example` to `local.properties` and set a Niagara 4.13 or later install:
 
 ```properties
 niagara_home=C:\\Niagara\\Niagara-4.14.0.142
 niagara_user_home=C:\\Users\\you\\Niagara\\tridium\\4.14.0.142
 ```
 
-`NIAGARA_HOME` works instead of the property. Use a full JDK for Gradle (`jar` and `jarsigner`). The JRE inside the Niagara install is missing those tools. Java 8 bytecode is what the module contains; the JDK that runs Gradle can be newer.
+`NIAGARA_HOME` works instead of the property. Use a full JDK for Gradle (`jar` and `jarsigner`). The JRE inside the Niagara install is missing those tools.
 
 If plugin resolution fails, set `gradlePluginVersion` (see `gradle.properties`) to the version your install actually ships.
 
@@ -101,7 +97,7 @@ jarsigner -verify -verbose "$NIAGARA_HOME/modules/controlBasic-rt.jar"
 
 Restart Workbench and the station. On a JACE, install through Platform → Software Manager instead of copying the file yourself.
 
-A new block's program is `examples/damper.cb`. After the first successful compile (station start, or Save in the editor) the wire sheet shows `AI1`, `VAR1`, `AO1`, and `BO1`.
+A new block's program is `examples/damper.cb`. After the first successful compile the wire sheet shows `AI1_RmTmp`, `AV1_ZnTmpSpt`, `AO1_DprCmd`, and `BO1_FanCmd`.
 
 ## 5. Use the block
 
@@ -125,10 +121,4 @@ The scan does not run on the station engine thread. A clock ticket wakes a singl
 - Workbench opening the editor on double-click, painting `BSyntax` colors, and linking the dynamic `BStatusNumeric` / `BStatusBoolean` slots.
 - A station clock firing the scan and `configFail` showing `lastError`.
 
-## Questions worth a follow-up
-
-- Which Niagara build are you compiling against (4.10, 4.13, 4.14, 4.15)? The module bytecode targets 4.10+. The Gradle plugin version has to match the tools in that install.
-- Do the programs you paste use line numbers, or labels and `ENDIF`? Both work. If one dialect is the one you care about, the error messages can lean that way.
-- Are the names you want on the wire sheet the KMC prefixes (`AI1`, `BO1`) or declared names (`INPUT RoomTemp`)? Both are implemented. The prefix list is easy to extend.
-- Should `DEWPOINT` / `ENTHALPY` match a specific KMC firmware's units, or is the approximation in `docs/LANGUAGE.md` enough?
-- What vendor string should be on the jar? It is `ControlBasic` today, in `niagara.gradle.kts`.
+Line-numbered programs are the form this module is written for. Labels and `ENDIF` still parse. `DEWPOINT` and `ENTHALPY` use the formulas in `docs/LANGUAGE.md`, not a KMC firmware.

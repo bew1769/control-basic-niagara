@@ -109,16 +109,16 @@ class ControlBasicTest {
         FakeClock clock = new FakeClock();
         clock.zoned = ZonedDateTime.of(2026, 11, 21, 0, 6, 0, 0, ZoneId.of("UTC"));
         Compilation program = compile(
-                "10 IF BI1 THEN START BO1 ELSE STOP BO1\n"
-                        + "20 ELAPSED = TIMEON(BO1)\n"
-                        + "30 IF TIME > 00:07:00 THEN OUT1 = 1 ELSE OUT1 = 0\n");
+                "10 IF BI1_OccSts THEN START BO1_FanCmd ELSE STOP BO1_FanCmd\n"
+                        + "20 ELAPSED = TIMEON(BO1_FanCmd)\n"
+                        + "30 IF TIME > 00:07:00 THEN AO1_Cmd = 1 ELSE AO1_Cmd = 0\n");
         RuntimeState rt = new RuntimeState();
         rt.time = clock;
         MapPoints points = new MapPoints();
-        points.values.put("BI1", Double.valueOf(1));
+        points.values.put("BI1_OCCSTS", Double.valueOf(1));
         rt.points = points;
         ControlBasic.run(program, rt, 1000);
-        assertEquals(0, points.values.get("OUT1").doubleValue(), 0);
+        assertEquals(0, points.values.get("AO1_CMD").doubleValue(), 0);
         assertEquals(0, rt.getVar("ELAPSED"), 0);
         clock.plusSeconds(120);
         clock.zoned = clock.zoned.plusSeconds(120);
@@ -126,7 +126,7 @@ class ControlBasicTest {
         assertEquals(120, rt.getVar("ELAPSED"), 0.001);
         clock.zoned = ZonedDateTime.of(2026, 11, 21, 0, 8, 0, 0, ZoneId.of("UTC"));
         ControlBasic.run(program, rt, 1000);
-        assertEquals(1, points.values.get("OUT1").doubleValue(), 0);
+        assertEquals(1, points.values.get("AO1_CMD").doubleValue(), 0);
     }
 
     @Test
@@ -200,34 +200,86 @@ class ControlBasicTest {
     }
 
     @Test
-    void slotsFromUsagePrefixAndDeclaration() {
+    void sebaPointNames() {
         Compilation program = ControlBasic.compile(
-                "INPUT RoomTemp\n"
-                        + "OUTPUT Damper\n"
-                        + "BINPUT Occupied\n"
-                        + "10 AO1 = AI1 + 1\n"
-                        + "20 IF Occupied THEN START BO1 ELSE STOP BO1\n"
-                        + "30 VAR1 = VAR1 + RoomTemp\n"
-                        + "40 FOR I = 1 TO 3\n"
-                        + "50 NEXT I\n"
-                        + "60 Damper = AI2\n");
+                "10 AO1_DprCmd = AI1_RmTmp + 1\n"
+                        + "20 IF BI1_OccSts THEN START BO1_FanCmd ELSE STOP BO1_FanCmd\n"
+                        + "30 AV1_ZnTmpSpt = AV1_ZnTmpSpt + AI2\n"
+                        + "40 BV1_SchdOcc = 1\n"
+                        + "50 AI3_CO2_1 = AI3_CO2_1\n"
+                        + "60 TempError = AI1_RmTmp - AV1_ZnTmpSpt\n"
+                        + "70 FOR I = 1 TO 3\n"
+                        + "80 NEXT I\n"
+                        + "90 Scratch = AI1_Room_Temp\n");
         assertTrue(program.ok(), program.diagnostics().toString());
         Map<String, SlotSpec> by = new LinkedHashMap<String, SlotSpec>();
         for (SlotSpec spec : program.slots()) {
             by.put(spec.canonical, spec);
         }
-        assertEquals(SlotDirection.INPUT, by.get("ROOMTEMP").direction);
-        assertEquals(SlotDirection.OUTPUT, by.get("DAMPER").direction);
-        assertEquals(SlotDataType.BOOLEAN, by.get("OCCUPIED").dataType);
-        assertEquals(SlotDirection.INPUT, by.get("OCCUPIED").direction);
-        assertEquals(SlotDirection.OUTPUT, by.get("AO1").direction);
-        assertEquals(SlotDirection.INPUT, by.get("AI1").direction);
-        assertEquals(SlotDataType.BOOLEAN, by.get("BO1").dataType);
-        assertEquals(SlotDirection.OUTPUT, by.get("BO1").direction);
-        assertEquals(SlotDirection.VARIABLE, by.get("VAR1").direction);
+        assertEquals("AI1_RmTmp", by.get("AI1_RMTMP").name);
+        assertEquals("AI1_RmTmp", by.get("AI1_RMTMP").niagaraName);
+        assertEquals(SlotDirection.INPUT, by.get("AI1_RMTMP").direction);
+        assertEquals(SlotDataType.NUMERIC, by.get("AI1_RMTMP").dataType);
+        assertEquals(SlotDirection.OUTPUT, by.get("AO1_DPRCMD").direction);
+        assertEquals(SlotDataType.NUMERIC, by.get("AO1_DPRCMD").dataType);
+        assertEquals(SlotDirection.INPUT, by.get("BI1_OCCSTS").direction);
+        assertEquals(SlotDataType.BOOLEAN, by.get("BI1_OCCSTS").dataType);
+        assertEquals(SlotDirection.OUTPUT, by.get("BO1_FANCMD").direction);
+        assertEquals(SlotDataType.BOOLEAN, by.get("BO1_FANCMD").dataType);
+        assertEquals(SlotDirection.VARIABLE, by.get("AV1_ZNTMPSPT").direction);
+        assertEquals(SlotDataType.NUMERIC, by.get("AV1_ZNTMPSPT").dataType);
+        assertEquals(SlotDirection.VARIABLE, by.get("BV1_SCHDOCC").direction);
+        assertEquals(SlotDataType.BOOLEAN, by.get("BV1_SCHDOCC").dataType);
         assertEquals(SlotDirection.INPUT, by.get("AI2").direction);
+        assertEquals(SlotDirection.INPUT, by.get("AI3_CO2_1").direction);
+        assertEquals("AI3_CO2_1", by.get("AI3_CO2_1").name);
+        assertFalse(by.containsKey("TEMPERROR"));
         assertFalse(by.containsKey("I"));
+        assertFalse(by.containsKey("SCRATCH"));
+        assertFalse(by.containsKey("AI1_ROOM_TEMP"));
         assertFalse(by.containsKey("TIME"));
+        Compilation folded = ControlBasic.compile("10 x = ai1_rmtmp\n");
+        assertEquals("ai1_rmtmp", folded.slots().get(0).name);
+        assertEquals(SlotDirection.INPUT, folded.slots().get(0).direction);
+        assertNull(SlotNames.parse("RoomTemp"));
+        assertNull(SlotNames.parse("AI1_Room_Temp"));
+        assertNull(SlotNames.parse("IN1_RmTmp"));
+        assertEquals("AI1_RmTmp", SlotNames.escape("AI1_RmTmp"));
+        assertEquals("Room$20Temp", SlotNames.escape("Room Temp"));
+        assertEquals("AI$2d1", SlotNames.escape("AI-1"));
+        assertEquals("$31Fan", SlotNames.escape("1Fan"));
+    }
+
+    @Test
+    void lineNumberedAhuSequence() {
+        FakeClock clock = new FakeClock();
+        clock.zoned = ZonedDateTime.of(2026, 11, 18, 10, 0, 0, 0, ZoneId.of("UTC"));
+        Compilation program = compile(
+                "10 REM Supply fan, cooling valve, and economizer\n"
+                        + "20 IF FIRST THEN AV1_ZnTmpSpt = 74\n"
+                        + "30 IF FIRST THEN AV2_SaTmpSpt = 55\n"
+                        + "40 IF BI1_OccSts THEN START BO1_SaFanCmd ELSE STOP BO1_SaFanCmd\n"
+                        + "50 IF BO1_SaFanCmd AND AI1_SaTmp > AV2_SaTmpSpt THEN AO1_ClgVlvPos = LIMIT(SCALE(AI1_SaTmp, AV2_SaTmpSpt, AV2_SaTmpSpt + 8, 0, 100), 0, 100) ELSE AO1_ClgVlvPos = 0\n"
+                        + "60 IF AI2_OaTmp < 55 AND BI1_OccSts THEN START BO2_EconEna ELSE STOP BO2_EconEna\n"
+                        + "70 IF TIME > 07:00:00 AND TIME < 18:00:00 AND DOW > 1 AND DOW < 7 THEN BV1_SchdOcc = 1 ELSE BV1_SchdOcc = 0\n"
+                        + "80 END\n");
+        RuntimeState rt = new RuntimeState();
+        rt.time = clock;
+        MapPoints points = new MapPoints();
+        points.values.put("BI1_OCCSTS", Double.valueOf(1));
+        points.values.put("AI1_SATMP", Double.valueOf(60));
+        points.values.put("AI2_OATMP", Double.valueOf(50));
+        rt.points = points;
+        Scan scan = ControlBasic.run(program, rt, 10000);
+        assertTrue(scan.ok(), scan.error == null ? "" : scan.error.format());
+        assertEquals(74, points.values.get("AV1_ZNTMPSPT").doubleValue(), 0);
+        assertEquals(55, points.values.get("AV2_SATMPSPT").doubleValue(), 0);
+        assertEquals(1, points.values.get("BO1_SAFANCMD").doubleValue(), 0);
+        assertEquals(62.5, points.values.get("AO1_CLGVLVPOS").doubleValue(), 0.001);
+        assertEquals(1, points.values.get("BO2_ECONENA").doubleValue(), 0);
+        assertEquals(1, points.values.get("BV1_SCHDOCC").doubleValue(), 0);
+        assertEquals(60, points.values.get("AI1_SATMP").doubleValue(), 0);
+        assertEquals(9, program.slots().size());
     }
 
     @Test
@@ -255,14 +307,14 @@ class ControlBasicTest {
         Compilation program = compile(Samples.DAMPER);
         RuntimeState rt = new RuntimeState();
         MapPoints points = new MapPoints();
-        points.values.put("AI1", Double.valueOf(80));
-        points.values.put("VAR1", Double.valueOf(90));
+        points.values.put("AI1_RMTMP", Double.valueOf(80));
+        points.values.put("AV1_ZNTMPSPT", Double.valueOf(90));
         rt.points = points;
         Scan scan = ControlBasic.run(program, rt, 10000);
         assertTrue(scan.ok(), scan.error == null ? "" : scan.error.format());
-        assertEquals(100, points.values.get("AO1").doubleValue(), 0.001);
-        assertEquals(1, points.values.get("BO1").doubleValue(), 0);
-        assertEquals(80, points.values.get("AI1").doubleValue(), 0);
+        assertEquals(100, points.values.get("AO1_DPRCMD").doubleValue(), 0.001);
+        assertEquals(1, points.values.get("BO1_FANCMD").doubleValue(), 0);
+        assertEquals(80, points.values.get("AI1_RMTMP").doubleValue(), 0);
         assertFalse(points.values.containsKey("FIRST"));
     }
 
