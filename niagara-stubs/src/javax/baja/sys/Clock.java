@@ -8,7 +8,11 @@ public final class Clock {
         void cancel();
     }
 
-    public static Ticket schedulePeriodically(BRelTime interval, Runnable callback, BComponent worker) {
+    /**
+     * Niagara 4.15 shape. There is no {@code Runnable} overload on {@code Clock}.
+     * The block's hidden {@code scanTick} action is the callback.
+     */
+    public static Ticket schedulePeriodically(BComponent worker, BRelTime interval, Action action, BValue arg) {
         return new Ticket() {
             @Override
             public void cancel() {

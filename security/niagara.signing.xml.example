@@ -1,14 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Example only. scripts/generate-dev-cert.sh writes security/niagara.signing.xml
-  with real values. That file is gitignored. Do not put a password here.
+  Shape of the profile Niagara 4.15.6 plugin 7.6.22 actually loads
+  (java.util.Properties XML). Do not fill in passwords here.
+  createProfile / generateCertificate write security/niagara.signing.xml,
+  which is gitignored, and a sibling security/niagara.signing.pkcs12.
 -->
-<signingProfile>
-  <className>com.tridium.gradle.plugins.signing.profile.RestrictedSigningProfile</className>
-  <alias>controlbasic</alias>
-  <keystoreType>PKCS12</keystoreType>
-  <keystoreFile>/absolute/path/to/security/dev-keystore.p12</keystoreFile>
-  <storePassword>REPLACE_ME</storePassword>
-  <keyPassword>REPLACE_ME</keyPassword>
-  <timestampUrl>http://timestamp.digicert.com</timestampUrl>
-</signingProfile>
+<!DOCTYPE properties SYSTEM "http://java.sun.com/dtd/properties.dtd">
+<properties>
+  <comment>Example only. No secrets.</comment>
+  <entry key="niagara.signing.profileType">com.tridium.gradle.plugins.signing.profile.RestrictedSigningProfile</entry>
+  <entry key="niagara.signing.storetype">PKCS12</entry>
+  <entry key="niagara.signing.keyalg">RSA</entry>
+  <entry key="niagara.signing.keysize">3072</entry>
+</properties>

@@ -2,11 +2,46 @@
 
 Niagara 4 will not load a module jar unless the jar is signed and the station or Workbench trusts the signing certificate. On current 4.x builds the default check is medium: the signature must verify and the certificate must be in that host's user trust store. A self-signed certificate is enough for a lab station. It is not a substitute for a CA-issued certificate on a job you ship.
 
-Passwords never go in git. `security/*.p12`, `security/*.cer`, `security/niagara.signing.xml`, and `security/niagara.signing.properties` are gitignored. Only the `*.example` files are tracked.
+Passwords never go in git. `security/*.p12`, `security/*.pkcs12`, `security/*.jceks`, `security/*.cer`, `security/*.pem`, `security/niagara.signing.xml`, and `security/niagara.signing.properties` are gitignored. Only the `*.example` files are tracked.
+
+## Development certificate (Niagara 4.15.6, plugin 7.6.22)
+
+This is the path that produced the signed jars. The profile file is Java properties XML (`<!DOCTYPE properties SYSTEM "http://java.sun.com/dtd/properties.dtd">`). The plugin reads it with `Properties.loadFromXML`. A `<signingProfile>` document is rejected with `InvalidPropertiesFormatException`.
+
+From the repo root, with `NIAGARA_HOME` set and `niagara/niagara_home` symlinked at the install (see the README):
+
+```bash
+./gradlew -c settings-niagara.gradle.kts createProfile \
+  --profile-path=security/niagara.signing.xml --store-type=PKCS12 -Psigning.skip=true
+./gradlew -c settings-niagara.gradle.kts generateCertificate \
+  --profile-path=security/niagara.signing.xml --alias=controlbasic \
+  --pem-file=security/dev-cert.pem -Psigning.skip=true
+```
+
+`createProfile` refuses to overwrite an existing profile. `generateCertificate` writes a random store password and key password into the profile and creates `security/niagara.signing.pkcs12`. The certificate verified on the jars is self-signed RSA 3072, SHA256withRSA, alias `controlbasic`, valid for 365 days. The signature has no timestamp.
+
+Then build without `-Psigning.skip`:
+
+```bash
+export NIAGARA_SIGNING_PROFILE="$PWD/security/niagara.signing.xml"
+export NIAGARA_SIGNING_ALIAS=controlbasic
+./gradlew -c settings-niagara.gradle.kts jar
+```
+
+Confirm:
+
+```bash
+jarsigner -verify -verbose "$NIAGARA_HOME/modules/controlBasic-rt.jar"
+jarsigner -verify -verbose "$NIAGARA_HOME/modules/controlBasic-wb.jar"
+```
+
+Both commands printed `jar verified` against the 4.15.6.20 install. The self-signed chain warning is expected. Import `security/dev-cert.pem` into the User Trust Store (steps below) before a station will accept the module at the default verification mode.
 
 ## Development certificate with keytool
 
-From the repo root, with a JDK on `PATH` (`keytool` ships with it; the JRE inside Niagara often omits it):
+`scripts/generate-dev-cert.sh` still creates a PKCS12 you choose the password for. Plugin 7.6.22 does not accept the XML that script writes, so do not point `niagara.signing.profile` at it on 4.15.6. Use the Gradle tasks above. The keytool steps remain if you only need a `.cer` to import by hand.
+
+From the repo root, with a JDK on `PATH` (`keytool` ships with it; the 4.15.6.20 `jre/bin` has `keytool` and `javac`, and does not have `jarsigner`):
 
 ```bash
 export NIAGARA_SIGNING_STORE_PASSWORD='pick-a-long-password'
@@ -22,38 +57,7 @@ set NIAGARA_SIGNING_STORE_PASSWORD=pick-a-long-password
 scripts\generate-dev-cert.bat
 ```
 
-The script writes:
-
-- `security/dev-keystore.p12` — PKCS12 keystore, RSA 2048, SHA256withRSA, code-signing extended key usage, 10 year life
-- `security/dev-cert.cer` — public certificate to import into Niagara
-- `security/niagara.signing.xml` and `security/niagara.signing.properties` — alias, keystore path, and passwords for the Gradle signing plugin
-
-`local.properties` (also gitignored; copy from `local.properties.example`):
-
-```properties
-certAlias=controlbasic
-niagara.signing.profile=security/niagara.signing.xml
-```
-
-You can point `niagara.signing.profile` at the `.properties` file instead, or set `NIAGARA_SIGNING_PROFILE` / `CERT_ALIAS` in the environment. The Gradle build reads those and passes them to `com.tridium.niagara-signing`. It does not fall back to Tridium's throwaway dev certificate. If the profile file is missing, the module build stops.
-
-The XML the script writes names `com.tridium.gradle.plugins.signing.profile.RestrictedSigningProfile` and the keystore fields Tridium's signing talks describe. If your exact plugin build rejects that file, generate one the plugin itself understands:
-
-```bash
-./gradlew -c settings-niagara.gradle.kts :createProfile --profile-path security/niagara.signing.xml -Psigning.skip=true
-./gradlew -c settings-niagara.gradle.kts :generateCertificate --profile-path security/niagara.signing.xml --alias controlbasic -Psigning.skip=true
-./gradlew -c settings-niagara.gradle.kts :exportCertificate --profile-path security/niagara.signing.xml --alias controlbasic --pem -Psigning.skip=true
-```
-
-`-Psigning.skip=true` is only for those one-time tasks, before a profile exists. Do not use it to build a jar you plan to install. After `createProfile`, point `niagara.signing.profile` at the file it wrote and build again without the skip flag. You can still import the keytool `.cer` if you would rather keep the keytool key; the profile just has to reference that keystore.
-
-Confirm the jar after a successful module build:
-
-```bash
-jarsigner -verify -verbose "$NIAGARA_HOME/modules/controlBasic-rt.jar"
-```
-
-A self-signed jar verifies with a warning that the certificate chain is not from a public CA. That warning is expected. Niagara's own check is whether the host trusts the certificate, which is the next step.
+The script writes `security/dev-keystore.p12` (RSA 2048, SHA256withRSA, code-signing extended key usage, 10 year life) and `security/dev-cert.cer`. It also writes `security/niagara.signing.xml` in a layout plugin 7.6.22 rejects. Leave signing to the Gradle tasks in the section above. The module build reads `NIAGARA_SIGNING_PROFILE` or `niagara.signing.profile` and stops if that file is missing. It does not fall back to Tridium's throwaway dev certificate.
 
 ## Trust the certificate
 

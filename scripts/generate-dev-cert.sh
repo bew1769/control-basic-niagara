@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
-# Create a self-signed code-signing certificate for local Niagara development.
+# Create a self-signed code-signing certificate with keytool.
 # Writes only under security/, which is gitignored except for the example templates.
+#
+# Niagara 4.15.6 signing plugin 7.6.22 does not accept the XML this script writes
+# (it loads the profile with Properties.loadFromXML). On that install, create the
+# profile with the Gradle tasks in docs/SIGNING.md instead.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

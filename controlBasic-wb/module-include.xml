@@ -1,8 +1,7 @@
-<?xml version="1.0" encoding="UTF-8"?>
 <!--
   Default view registration. default="true" plus AgentOn.Preference.PREFERRED
   makes this the view Workbench opens on double-click.
-  Template: HawkenIndustries/Niagara4-ResoluteTagUtils BImportExportManager
+  Slot-o-matic wraps this file in a dummy root, so it must not start with an XML declaration.
 -->
 <types>
   <type class="com.controlbasic.ui.BControlBasicEditor" name="ControlBasicEditor">

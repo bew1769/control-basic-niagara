@@ -10,6 +10,8 @@ out/
 # Signing material. Example templates under security/ are tracked.
 security/*.p12
 security/*.pfx
+security/*.pkcs12
+security/*.jceks
 security/*.jks
 security/*.keystore
 security/*.cer
@@ -17,6 +19,10 @@ security/*.pem
 security/*.crt
 security/niagara.signing.xml
 security/niagara.signing.properties
+
+# Local Niagara install. Never commit Tridium binaries.
+.niagara/
+niagara/
 
 # Niagara build output
 controlBasic-rt/build/

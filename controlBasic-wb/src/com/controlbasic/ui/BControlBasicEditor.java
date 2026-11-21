@@ -14,6 +14,7 @@ import javax.baja.ui.event.BKeyEvent;
 import javax.baja.ui.pane.BEdgePane;
 import javax.baja.ui.pane.BTextEditorPane;
 import javax.baja.ui.text.BTextEditor;
+import javax.baja.ui.text.Position;
 import javax.baja.workbench.view.BWbComponentView;
 
 import com.controlbasic.BControlBasicBlock;
@@ -58,7 +59,7 @@ public class BControlBasicEditor extends BWbComponentView {
   public BControlBasicEditor() {
     syntax = BControlBasicSyntax.make();
     editor = new CodeEditor();
-    editor.setSyntax(syntax);
+    editor.setParser(syntax);
     gutter = new BTextEditor("1", false);
     status = new BLabel("Ready");
 
@@ -106,7 +107,7 @@ public class BControlBasicEditor extends BWbComponentView {
       Diagnostic diagnostic = compilation.diagnostics().get(0);
       syntax.setErrorLine(diagnostic.line);
       status.setText(diagnostic.format());
-      editor.repaint();
+      reparse();
       return;
     }
     syntax.setErrorLine(-1);
@@ -127,7 +128,15 @@ public class BControlBasicEditor extends BWbComponentView {
       ok.append(" — ").append(block.getLastError());
     }
     status.setText(ok.toString());
-    editor.repaint();
+    reparse();
+  }
+
+  private void reparse() {
+    Position caret = editor.getCaretPosition();
+    editor.setText(editor.getText());
+    if (caret != null) {
+      editor.moveCaretPosition(caret);
+    }
   }
 
   private void refreshGutter(String text) {

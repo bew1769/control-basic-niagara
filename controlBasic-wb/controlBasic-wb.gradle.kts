@@ -18,6 +18,8 @@ dependencies {
     nre(":nre")
     api(":baja")
     api(":bajaui-wb")
+    // BTextEditor and BButton signatures reference javax.baja.gx.BImage, which lives in gx-rt.
+    api(":gx-rt")
     api(":gx-wb")
     api(":workbench-wb")
     api(project(":controlBasic-rt"))

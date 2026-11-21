@@ -7,6 +7,10 @@ public final class BFacets extends BValue {
         return new BFacets();
     }
 
+    public static BFacets make(String name, boolean value) {
+        return new BFacets();
+    }
+
     public boolean getb(String name, boolean def) {
         return def;
     }

@@ -14,7 +14,6 @@ import javax.baja.nre.annotations.NiagaraType;
 import javax.baja.status.BStatusBoolean;
 import javax.baja.status.BStatusNumeric;
 import javax.baja.sys.Action;
-import javax.baja.sys.BBoolean;
 import javax.baja.sys.BComponent;
 import javax.baja.sys.BFacets;
 import javax.baja.sys.BRelTime;
@@ -111,6 +110,7 @@ import com.controlbasic.core.TimeSource;
 )
 @NiagaraAction(name = "compile")
 @NiagaraAction(name = "reset")
+@NiagaraAction(name = "scanTick", flags = Flags.HIDDEN)
 public class BControlBasicBlock extends BComponent {
 /*+ ------------ BEGIN BAJA AUTO GENERATED CODE ------------ +*/
 /*@ $com.controlbasic.BControlBasicBlock(3741209182)1.0$ @*/
@@ -253,6 +253,14 @@ public class BControlBasicBlock extends BComponent {
   public void reset() { invoke(reset, null, null); }
 
 ////////////////////////////////////////////////////////////////
+// Action "scanTick"
+////////////////////////////////////////////////////////////////
+
+  public static final Action scanTick = newAction(Flags.HIDDEN, null);
+
+  public void scanTick() { invoke(scanTick, null, null); }
+
+////////////////////////////////////////////////////////////////
 // Type
 ////////////////////////////////////////////////////////////////
 
@@ -309,8 +317,12 @@ public class BControlBasicBlock extends BComponent {
     setConsole("");
     if (compiled != null && compiled.ok()) {
       setLastError("");
-      clearFault();
     }
+  }
+
+  /** Clock callback. Queues one scan and returns so the clock thread is not held. */
+  public void doScanTick() {
+    submitScan();
   }
 
   @Override
@@ -372,21 +384,18 @@ public class BControlBasicBlock extends BComponent {
         compiled = next;
         String message = next.diagnostics().get(0).format();
         setLastError(message);
-        fault(message);
         return;
       }
       syncSlots(next.slots());
       compiled = next;
       setSlotSummary(summarize(next.slots()));
       setLastError("");
-      clearFault();
       if (resetRuntime) {
         runtime.reset();
         setScanCount(0);
       }
     } catch (RuntimeException ex) {
       setLastError(ex.getMessage() == null ? ex.toString() : ex.getMessage());
-      fault(getLastError());
     } finally {
       syncing = false;
     }
@@ -404,12 +413,7 @@ public class BControlBasicBlock extends BComponent {
     if (interval == null || interval.getMillis() < MIN_SCAN_MILLIS) {
       interval = BRelTime.make(MIN_SCAN_MILLIS);
     }
-    ticket = Clock.schedulePeriodically(interval, new Runnable() {
-      @Override
-      public void run() {
-        submitScan();
-      }
-    }, this);
+    ticket = Clock.schedulePeriodically(this, interval, scanTick, null);
   }
 
   private void submitScan() {
@@ -446,24 +450,20 @@ public class BControlBasicBlock extends BComponent {
       setConsole(runtime.console());
       if (runtime.isHalted() || scan.halted) {
         setLastError("Halted");
-        fault("Halted");
       } else if (scan.error != null) {
         setLastError(scan.error.format());
-        fault(scan.error.format());
       } else if (getLastError() != null && getLastError().length() > 0) {
         setLastError("");
-        clearFault();
       }
     } catch (RuntimeException ex) {
       String message = ex.getMessage() == null ? ex.toString() : ex.getMessage();
       setLastError(message);
-      fault(message);
     }
   }
 
   private void syncSlots(List<SlotSpec> desired) {
     List<SlotPlan.Existing> existing = new ArrayList<SlotPlan.Existing>();
-    Property[] dynamic = getDynamicProperties();
+    Property[] dynamic = getDynamicPropertiesArray();
     if (dynamic != null) {
       for (int i = 0; i < dynamic.length; i++) {
         Property prop = dynamic[i];
@@ -489,7 +489,7 @@ public class BControlBasicBlock extends BComponent {
       }
       BValue value = spec.dataType == SlotDataType.BOOLEAN ? new BStatusBoolean() : new BStatusNumeric();
       String slotName = SlotPath.escape(spec.name);
-      add(slotName, value, flags, BFacets.make(SLOT_FACET, BBoolean.TRUE), null);
+      add(slotName, value, flags, BFacets.make(SLOT_FACET, true), null);
     }
   }
 
@@ -502,7 +502,7 @@ public class BControlBasicBlock extends BComponent {
   }
 
   private BValue findManaged(String canonical) {
-    Property[] dynamic = getDynamicProperties();
+    Property[] dynamic = getDynamicPropertiesArray();
     if (dynamic == null || canonical == null) {
       return null;
     }
@@ -575,22 +575,6 @@ public class BControlBasicBlock extends BComponent {
       }
     }
     return text.toString();
-  }
-
-  private void fault(String message) {
-    try {
-      configFail(message);
-    } catch (RuntimeException ignored) {
-      // configFail is a no-op until the component is mounted in a station.
-    }
-  }
-
-  private void clearFault() {
-    try {
-      configOk();
-    } catch (RuntimeException ignored) {
-      // See fault().
-    }
   }
 
   private static final class CompilationHolder {

@@ -18,6 +18,8 @@ The interpreter (lexer, parser, compiler, executor) is plain Java with no Niagar
 
 The module targets Niagara 4.13 and later. Source and bytecode stay Java 8, which is what 4.13 stations load. The build uses the Gradle 7 plugin set shipped with those installs (`com.tridium.niagara`, `com.tridium.vendor`, `com.tridium.niagara-module`, `com.tridium.niagara-signing`). If resolution fails, set `gradlePluginVersion` in `gradle.properties` to the version directory under `niagara_home/etc/m2/repository/com/tridium/niagara-module/`. The vendor string on the jar is `bew1769`.
 
+This was built and signed against a Niagara **4.15.6.20** Linux Supervisor (Gradle plugins **7.6.22**, settings plugin **7.6.3**). The 4.13 minimum stays: the calls that compile here (`TextParser`, `Clock.schedulePeriodically(BComponent, BRelTime, Action, BValue)`, `getDynamicPropertiesArray()`, `BFacets.make(String, boolean)`) are the 4.13-era shapes. It was not compiled against a 4.13 install. `BComponent` in 4.15 has no `configFail`; the fault text is the `lastError` slot.
+
 ## Templates
 
 The module layout follows modules and notes that are already in the open:
@@ -28,7 +30,7 @@ The module layout follows modules and notes that are already in the open:
 - [cljohnson3rd/Niagara-Developer-Series](https://github.com/cljohnson3rd/Niagara-Developer-Series) `BDriverFinderNotificationPopup` — `BTextEditor(String, boolean)` and `BTextEditorPane`.
 - Dynamic slots use `add(name, value, Flags.SUMMARY, facets, null)` the way Niagara component code does (the same call shape as the [BDynamicProperties gist](https://gist.github.com/mittens13/01c433927e557839fdb926f30893b029)). Inputs and variables stay writable. Outputs are `SUMMARY | READONLY`, so links can read them and the program is what writes them.
 
-`BControlBasicSyntax` is the same kind of hook as `javax.baja.ui.text.BJavaSyntax`: a `BSyntax` installed with `BTextEditor.setSyntax`. Coloring and errors both come from the core lexer and `ControlBasic.compile`, so the red line is the same diagnostic the station stores in `lastError`. If your `bajaui` declares a different abstract method on `BSyntax`, only `BControlBasicSyntax.colorLine` needs to match `BJavaSyntax`. The token rules stay in `Highlight`.
+`BControlBasicSyntax` extends `javax.baja.ui.text.TextParser` and is installed with `BTextEditor.setParser`. Niagara 4.15 has no `javax.baja.ui.text.BSyntax`. Coloring comes from the core lexer. An error line uses `Segment.PREPROCESSOR` (there is no error segment type) and the status line under the editor. The token rules stay in `Highlight`.
 
 ## Slot names (short)
 
@@ -50,54 +52,64 @@ That is `controlbasic-core` only. It does not download Niagara and does not sign
 
 ## 2. Point the build at Niagara
 
-Copy `local.properties.example` to `local.properties` and set a Niagara 4.13 or later install:
+`settings-niagara.gradle.kts` reads `niagara_home` from `local.properties`, then `NIAGARA_HOME`. That path is only the Gradle plugin repository (`$NIAGARA_HOME/etc/m2/repository`).
 
-```properties
-niagara_home=C:\\Niagara\\Niagara-4.14.0.142
-niagara_user_home=C:\\Users\\you\\Niagara\\tridium\\4.14.0.142
+The module plugin resolves `baja.jar` and the other runtime jars from a directory named `niagara/niagara_home` under the repo, not from the environment variable. Symlink the install there (both that directory and `.niagara/` are gitignored; do not commit Tridium files):
+
+```bash
+mkdir -p niagara
+ln -sfn /path/to/Niagara-4.15.6.20 niagara/niagara_home
+export NIAGARA_HOME=/path/to/Niagara-4.15.6.20
 ```
 
-`NIAGARA_HOME` works instead of the property. Use a full JDK for Gradle (`jar` and `jarsigner`). The JRE inside the Niagara install is missing those tools.
+`compileJava` asks for a Java 8 toolchain. The 4.15.6.20 `jre` is Zulu 8.0.502 and includes `javac`. Tell Gradle about it (this machine path stays out of git):
 
-If plugin resolution fails, set `gradlePluginVersion` (see `gradle.properties`) to the version your install actually ships.
+```properties
+org.gradle.java.installations.paths=/path/to/Niagara-4.15.6.20/jre
+```
+
+Gradle itself can run on a newer JDK. On this machine that was OpenJDK 21.0.13. The Niagara `jre/bin` does not include `jarsigner`; verification used the system JDK's `jarsigner`.
 
 ## 3. Create a signing certificate
 
-Niagara refuses an unsigned module when verification is at its default. From the repo root:
+Niagara 4.15.6 plugin 7.6.22 stores the profile as a Java `properties` XML document (`Properties.loadFromXML`). A hand-written `<signingProfile>` file fails the jar task with `InvalidPropertiesFormatException`. Create the profile with the signing plugin. `-Psigning.skip=true` is only for these two tasks, before a profile exists:
 
 ```bash
-export NIAGARA_SIGNING_STORE_PASSWORD='pick-a-long-password'
-./scripts/generate-dev-cert.sh
+./gradlew -c settings-niagara.gradle.kts createProfile \
+  --profile-path=security/niagara.signing.xml --store-type=PKCS12 -Psigning.skip=true
+./gradlew -c settings-niagara.gradle.kts generateCertificate \
+  --profile-path=security/niagara.signing.xml --alias=controlbasic \
+  --pem-file=security/dev-cert.pem -Psigning.skip=true
 ```
 
-Windows: `scripts\generate-dev-cert.bat` with `NIAGARA_SIGNING_STORE_PASSWORD` set.
+That writes `security/niagara.signing.xml` (passwords included), a sibling keystore `security/niagara.signing.pkcs12`, and the PEM. None of those are committed. The certificate is self-signed, RSA 3072, SHA256withRSA, validity 365 days, alias `controlbasic`. Import the PEM into the Workbench User Trust Store before you expect a station to load the jar. Details are in [docs/SIGNING.md](docs/SIGNING.md).
 
-Then in `local.properties`:
-
-```properties
-certAlias=controlbasic
-niagara.signing.profile=security/niagara.signing.xml
-```
-
-Import `security/dev-cert.cer` into the Workbench User Trust Store **before** you expect the station to load the jar. Steps, the `createProfile` alternative, and production CA certificates are in [docs/SIGNING.md](docs/SIGNING.md).
+`scripts/generate-dev-cert.sh` still builds a keytool PKCS12 if you want a certificate you control the password of. Plugin 7.6.22 will not sign with the XML that script writes.
 
 ## 4. Build and install
 
 ```bash
+export NIAGARA_SIGNING_PROFILE="$PWD/security/niagara.signing.xml"
+export NIAGARA_SIGNING_ALIAS=controlbasic
 ./gradlew -c settings-niagara.gradle.kts jar
 ```
 
-The Niagara plugin compiles `controlBasic-rt` and `controlBasic-wb`, folds the core interpreter into the runtime jar, signs both jars, and copies them to `niagara_home/modules` (`controlBasic-rt.jar` and `controlBasic-wb.jar`). If they are not there, copy them from each module's `build/libs`.
+The plugin compiles `controlBasic-rt` and `controlBasic-wb`, folds the core interpreter into the runtime jar, signs both jars, and copies them to `niagara_home/modules`. The workbench jar also needs `gx-rt` on the compile classpath: `BButton` and `BTextEditor` signatures reference `javax.baja.gx.BImage`, which is not inside `gx-wb`.
+
+`module-include.xml` must not start with an XML declaration. Slot-o-matic wraps the file in `<dummyroot>`, and a declaration after that is a parse error.
 
 Check the signature:
 
 ```bash
 jarsigner -verify -verbose "$NIAGARA_HOME/modules/controlBasic-rt.jar"
+jarsigner -verify -verbose "$NIAGARA_HOME/modules/controlBasic-wb.jar"
 ```
+
+`jar verified` is the result that matters. A self-signed jar also warns that the certificate chain is not from a public CA, and this profile does not add a timestamp.
 
 Restart Workbench and the station. On a JACE, install through Platform → Software Manager instead of copying the file yourself.
 
-A new block's program is `examples/damper.cb`. After the first successful compile the wire sheet shows `AI1_RmTmp`, `AV1_ZnTmpSpt`, `AO1_DprCmd`, and `BO1_FanCmd`.
+A new block's program is `examples/damper.cb`. After the first successful compile the wire sheet shows `AI1_RmTmp`, `AV1_ZnTmpSpt`, `AO1_DprCmd`, and `BO1_FanCmd`. The scan is a hidden `scanTick` action. `Clock` has no `Runnable` overload in 4.15; `Clock.schedulePeriodically(this, interval, scanTick, null)` queues that action, and the action hands the scan to a daemon thread.
 
 ## 5. Use the block
 
@@ -110,15 +122,25 @@ A new block's program is `examples/damper.cb`. After the first successful compil
 
 The scan does not run on the station engine thread. A clock ticket wakes a single daemon thread. If a scan is still going, the next tick is skipped.
 
-## What was verified without a Niagara install
+## What was verified on Niagara 4.15.6.20
 
-- `./gradlew :controlbasic-core:test` — arithmetic, `IF` / `ELSEIF` / `ENDIF`, `GOTO` / `GOSUB` / `FOR`, `IF+`, `TIME` / `TIMEON`, slot classification, slot diffing that keeps an existing name, instruction limit, parse and runtime line numbers, the sample program.
-- `./gradlew sanity` — `BControlBasicBlock` and `BControlBasicEditor` compile against the stubs in this repo.
+The Supervisor zip (`Tridium_EMEA_N4_Supervisor_for_Linux_x64-4.15.6.20.zip`) downloaded over HTTP without a login. A silent install accepted the license and created the `niagara` user. The install tree is gitignored.
 
-## What needs your Niagara install
+- `./gradlew -c settings-niagara.gradle.kts jar` compiled both module parts against that install's jars and plugin 7.6.22, signed them, and copied them to `modules/`.
+- Signed files: `controlBasic-rt.jar` and `controlBasic-wb.jar`. `jarsigner -verify` reported `jar verified` for both. Signer `CN=ubuntu@cursor(controlbasic), OU=For Development Purposes Only Do Not Distribute, O=Tridium, L=Richmond, ST=Virginia, C=US`. Digest SHA-256, signature SHA256withRSA, 3072-bit key. Self-signed, no timestamp, certificate expires 2027-10-31.
+- `nre -modules:controlBasic` listed `controlBasic-rt bew1769 1.0.0` and `controlBasic-wb bew1769 1.0.0`. The user-home registry contains `ControlBasicBlock` and `ControlBasicEditor`. The module signature registry loaded without rejecting the jars.
+- `./gradlew test` and `./gradlew sanity` still cover the interpreter and the stub compile.
 
-- The Gradle plugin actually resolving from `niagara_home/etc/m2/repository`, Slot-o-matic rewriting the generated regions, and `jarsigner` accepting the profile.
-- Workbench opening the editor on double-click, painting `BSyntax` colors, and linking the dynamic `BStatusNumeric` / `BStatusBoolean` slots.
-- A station clock firing the scan and `configFail` showing `lastError`.
+## What the license blocked
+
+`nre -licenses` reported `Licenses (perpetual) none` and `Features none` for host `LNX-EB1D-0A44-FAB8-A2F3`. Starting a station (`station` with no arguments, which goes through `nre`) stopped before a station existed:
+
+```
+javax.baja.license.FeatureNotLicensedException: tridium:nre
+    at com.tridium.sys.license.NLicenseManager.checkFeature(NLicenseManager.java:95)
+    at com.tridium.sys.Nre.runClass(Nre.java:669)
+```
+
+The block was not instantiated, a program was not scanned, and dynamic slots were not observed on a running station. Workbench was not started. Those checks need a license that includes the `tridium:nre` feature, plus the dev certificate in that host's user trust store.
 
 Line-numbered programs are the form this module is written for. Labels and `ENDIF` still parse. `DEWPOINT` and `ENTHALPY` use the formulas in `docs/LANGUAGE.md`, not a KMC firmware.

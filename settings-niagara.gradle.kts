@@ -6,16 +6,14 @@
  * Niagara 4.13+ Gradle plugin 7.6.x.
  */
 
-import java.util.Properties
-
 pluginManagement {
-    val loaded = Properties()
+    val loaded = java.util.Properties()
     val localFile = file("local.properties")
     if (localFile.exists()) {
         localFile.inputStream().use { loaded.load(it) }
     }
+    val gradleProps = java.util.Properties()
     val gradleFile = file("gradle.properties")
-    val gradleProps = Properties()
     if (gradleFile.exists()) {
         gradleFile.inputStream().use { gradleProps.load(it) }
     }
@@ -27,9 +25,18 @@ pluginManagement {
             }
             return fromLocal
         }
-        System.getProperty(name)?.let { if (it.isNotBlank()) return it }
-        System.getenv(name)?.let { if (it.isNotBlank()) return it }
-        gradleProps.getProperty(name)?.let { if (it.isNotBlank()) return it }
+        val sys = System.getProperty(name)
+        if (!sys.isNullOrBlank()) {
+            return sys
+        }
+        val env = System.getenv(name)
+        if (!env.isNullOrBlank()) {
+            return env
+        }
+        val fromGradle = gradleProps.getProperty(name)
+        if (!fromGradle.isNullOrBlank()) {
+            return fromGradle
+        }
         return null
     }
 

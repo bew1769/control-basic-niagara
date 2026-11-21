@@ -4,7 +4,7 @@ import javax.baja.ui.BWidget;
 
 public class BTextEditor extends BWidget {
     private String text;
-    private BSyntax syntax;
+    private TextParser parser;
 
     public BTextEditor() {
         this("", true);
@@ -22,12 +22,19 @@ public class BTextEditor extends BWidget {
         this.text = text == null ? "" : text;
     }
 
-    public void setSyntax(BSyntax syntax) {
-        this.syntax = syntax;
+    public void setParser(TextParser parser) {
+        this.parser = parser;
     }
 
-    public BSyntax getSyntax() {
-        return syntax;
+    public TextParser getParser() {
+        return parser;
+    }
+
+    public Position getCaretPosition() {
+        return new Position();
+    }
+
+    public void moveCaretPosition(Position position) {
     }
 
     public void setEditable(boolean editable) {

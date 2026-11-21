@@ -1,9 +1,11 @@
 # Copy to local.properties. This file is an example and contains no secrets.
 # local.properties is gitignored.
 
-# Niagara 4.10 or newer install used to compile the module.
-niagara_home=C:\\Niagara\\Niagara-4.14.0.142
-niagara_user_home=C:\\Users\\you\\Niagara\\tridium\\4.14.0.142
+# Niagara 4.13 or later install. settings-niagara.gradle.kts uses this as the
+# plugin repository. The module jars are resolved from niagara/niagara_home
+# (a symlink to this same install). See README.md.
+niagara_home=C:\\Niagara\\Niagara-4.15.6.20
+niagara_user_home=C:\\Users\\you\\Niagara\\tridium\\4.15.6.20
 
 # Optional when the Gradle plugins are not under niagara_home/etc/m2/repository.
 # gradlePluginHome=C:\\Niagara\\Niagara-4.14.0.142\\etc\\m2\\repository
