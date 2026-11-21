@@ -42,7 +42,7 @@ A slot is a KMC object plus an optional [SEBA](https://bms-applications.schneide
 
 ## 1. Run the interpreter tests
 
-You need a JDK that can compile `--release 8` (JDK 8 through 21). From the repo root:
+You need JDK 8 through 21. On JDK 9 and later the build passes `--release 8`; JDK 8 javac has no `--release` flag, so there it relies on source/target 1.8. The Niagara 4.15 `jre` (Zulu 8, includes `javac`) works as `JAVA_HOME`. From the repo root:
 
 ```bash
 ./gradlew test
@@ -132,6 +132,25 @@ The Supervisor zip (`Tridium_EMEA_N4_Supervisor_for_Linux_x64-4.15.6.20.zip`) do
 - Signed files: `controlBasic-rt.jar` and `controlBasic-wb.jar`. `jarsigner -verify` reported `jar verified` for both. Signer `CN=ubuntu@cursor(controlbasic), OU=For Development Purposes Only Do Not Distribute, O=Tridium, L=Richmond, ST=Virginia, C=US`. Digest SHA-256, signature SHA256withRSA, 3072-bit key. Self-signed, no timestamp, certificate expires 2027-10-31.
 - `nre -modules:controlBasic` listed `controlBasic-rt bew1769 1.0.0` and `controlBasic-wb bew1769 1.0.0`. The user-home registry contains `ControlBasicBlock` and `ControlBasicEditor`. The module signature registry loaded without rejecting the jars.
 - `./gradlew test` and `./gradlew sanity` still cover the interpreter and the stub compile.
+
+## Building on Windows
+
+Verified on Windows 11 with Niagara 4.15.6.20 (Vykon brand), `JAVA_HOME` set to `C:\Niagara\Niagara-4.15.6.20\jre`, and the Gradle 8.10.2 wrapper:
+
+```powershell
+$env:JAVA_HOME = "C:\Niagara\Niagara-4.15.6.20\jre"
+.\gradlew.bat test sanity
+mkdir niagara
+cmd /c mklink /J niagara\niagara_home C:\Niagara\Niagara-4.15.6.20
+.\gradlew.bat -c settings-niagara.gradle.kts '-Psigning.skip=true' :controlBasic-rt:compileJava
+```
+
+- A directory junction (`mklink /J`) stands in for the symlink and needs no administrator rights.
+- Quote `-P` arguments that contain a dot. PowerShell splits an unquoted `-Psigning.skip=true` at the dot, and the build then stops with "Module signing profile is missing".
+- `:controlBasic-wb:compileJava` depends on the signed `controlBasic-rt` jar, so it cannot run with `-Psigning.skip=true`. The workbench sources were checked by calling `javac` directly against `baja.jar`, `bajaui-wb.jar`, `gx-rt.jar`, `gx-wb.jar`, `workbench-wb.jar`, `nre.jar`, and the compiled rt classes. They compiled.
+- `jar` copies the signed jars into `niagara/niagara_home/modules`, which is the real install when the junction points at it.
+
+This Windows host has a license with `nre`, `station`, and `workbench`, so the runtime check that the Linux license blocked can be done here once the jars are signed and the certificate is trusted.
 
 ## What the license blocked
 

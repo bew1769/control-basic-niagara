@@ -21,7 +21,10 @@ sourceSets.main {
 }
 
 tasks.withType<JavaCompile>().configureEach {
-    options.release.set(8)
+    // JDK 8 javac has no --release flag; source/targetCompatibility cover it there.
+    if (JavaVersion.current().isJava9Compatible) {
+        options.release.set(8)
+    }
     options.encoding = "UTF-8"
     options.compilerArgs.add("-Xlint:-options")
 }
