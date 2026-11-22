@@ -25,6 +25,7 @@ import javax.baja.sys.Property;
 import javax.baja.sys.Sys;
 import javax.baja.sys.Type;
 
+import com.controlbasic.core.ActiveProgram;
 import com.controlbasic.core.Compilation;
 import com.controlbasic.core.ControlBasic;
 import com.controlbasic.core.PointImage;
@@ -276,7 +277,14 @@ public class BControlBasicBlock extends BComponent {
 
   private static final long MIN_SCAN_MILLIS = 100L;
 
-  private Compilation compiled = CompilationHolder.EMPTY;
+  /** Last program that compiled; a failed edit leaves it running. */
+  private final ActiveProgram active = new ActiveProgram();
+  /**
+   * Reset requested by the engine thread (Reset action or a recompile). The
+   * scan thread applies it before its next scan, together with picking up the
+   * new program, so RuntimeState is only ever touched by the scan thread.
+   */
+  private final AtomicBoolean resetPending = new AtomicBoolean(false);
   private RuntimeState runtime = new RuntimeState();
   private Clock.Ticket ticket;
   private ExecutorService executor;
@@ -312,12 +320,10 @@ public class BControlBasicBlock extends BComponent {
   }
 
   public void doReset() {
-    runtime.reset();
+    resetPending.set(true);
     setScanCount(0);
     setConsole("");
-    if (compiled != null && compiled.ok()) {
-      setLastError("");
-    }
+    setLastError(active.statusText(null));
   }
 
   /** Clock callback. Queues one scan and returns so the clock thread is not held. */
@@ -331,6 +337,9 @@ public class BControlBasicBlock extends BComponent {
     if (runtime == null) {
       runtime = new RuntimeState();
     }
+    // The runtime starts fresh, so a scan count saved by the last run is stale.
+    // Without this, a block whose program no longer compiles shows it forever.
+    setScanCount(0);
     recompile(false);
     executor = Executors.newSingleThreadExecutor(new ThreadFactory() {
       @Override
@@ -381,17 +390,21 @@ public class BControlBasicBlock extends BComponent {
     try {
       Compilation next = ControlBasic.compile(getProgram());
       if (!next.ok()) {
-        compiled = next;
-        String message = next.diagnostics().get(0).format();
-        setLastError(message);
+        // Keep the slots and keep scanning the last program that compiled.
+        active.offer(next);
+        setLastError(active.statusText(null));
         return;
       }
       syncSlots(next.slots());
-      compiled = next;
+      synchronized (active) {
+        if (resetRuntime) {
+          resetPending.set(true);
+        }
+        active.offer(next);
+      }
       setSlotSummary(summarize(next.slots()));
       setLastError("");
       if (resetRuntime) {
-        runtime.reset();
         setScanCount(0);
       }
     } catch (RuntimeException ex) {
@@ -437,9 +450,17 @@ public class BControlBasicBlock extends BComponent {
       if (!isRunning() || !getEnabled()) {
         return;
       }
-      Compilation program = compiled;
-      if (program == null || !program.ok()) {
+      Compilation program;
+      boolean reset;
+      synchronized (active) {
+        program = active.running();
+        reset = resetPending.getAndSet(false);
+      }
+      if (program == null) {
         return;
+      }
+      if (reset) {
+        runtime.reset();
       }
       runtime.time = TimeSource.SYSTEM;
       runtime.scanIntervalSeconds = Math.max(0.1, getScanInterval().getMillis() / 1000.0);
@@ -448,12 +469,14 @@ public class BControlBasicBlock extends BComponent {
       Scan scan = ControlBasic.run(program, runtime, getMaxInstructions());
       setScanCount((int) Math.min(Integer.MAX_VALUE, runtime.scanCount()));
       setConsole(runtime.console());
-      if (runtime.isHalted() || scan.halted) {
-        setLastError("Halted");
-      } else if (scan.error != null) {
-        setLastError(scan.error.format());
-      } else if (getLastError() != null && getLastError().length() > 0) {
-        setLastError("");
+      String status;
+      if ((runtime.isHalted() || scan.halted) && active.compileError() == null) {
+        status = "Halted";
+      } else {
+        status = active.statusText(scan.error == null ? null : scan.error.format());
+      }
+      if (!status.equals(getLastError())) {
+        setLastError(status);
       }
     } catch (RuntimeException ex) {
       String message = ex.getMessage() == null ? ex.toString() : ex.getMessage();
@@ -575,9 +598,5 @@ public class BControlBasicBlock extends BComponent {
       }
     }
     return text.toString();
-  }
-
-  private static final class CompilationHolder {
-    static final Compilation EMPTY = ControlBasic.compile("");
   }
 }

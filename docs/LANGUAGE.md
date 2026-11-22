@@ -48,9 +48,11 @@ Names are case-insensitive. The slot keeps the first spelling (`AI1_RmTmp` and `
 
 Niagara slot names are letters, digits, and underscore, and they start with a letter or underscore. The block passes the name through `javax.baja.naming.SlotPath.escape`, which is the `$xx` / `$uxxxx` escaping the Niagara developer guide describes for slot names and `TextUtil`. `AI1_RmTmp` is already valid. A space becomes `$20` and a hyphen becomes `$2d`.
 
-Saving a program that compiles rebuilds dynamic slots. A name that is still present keeps its slot object, so links stay. A name that disappeared is removed. A boolean/numeric type change removes and recreates the slot. Slots this block created carry the facet `cbSlot=true`. A failed compile does not change slots.
+Saving a program that compiles rebuilds dynamic slots. A name that is still present keeps its slot object, so links stay. A name that disappeared is removed. A boolean/numeric type change removes and recreates the slot. Slots this block created carry the facet `cbSlot=true`. A failed compile does not change slots, and the last program that compiled keeps scanning. **Last Error** shows the compile error followed by `(still running the last program that compiled)` until a fixed program is saved.
 
 Each scan copies every slot into the program, runs from the top, then writes outputs and variables back. Inputs are not written back.
+
+Status flags are not used. An input that is null, fault, down, stale, or overridden is read as its value, so check the source point if that matters. Output and variable slots are written with their value only and keep an ok status.
 
 ## Execution model
 
@@ -83,7 +85,7 @@ Highest to lowest, matching the KMC precedence table. `^` binds tighter than a l
 
 ## Errors
 
-A compile error (syntax, `GOTO` to a missing line, `NEXT` without `FOR`, an unsupported statement, or `NAME(x)` where `NAME` is neither a function nor an array that is `DIM`med or assigned somewhere) sets **Last Error** with the line and column. The previous program and its slots stay in place.
+A compile error (syntax, `GOTO` to a missing line, `NEXT` without `FOR`, an unsupported statement, or `NAME(x)` where `NAME` is neither a function nor an array that is `DIM`med or assigned somewhere) sets **Last Error** with the line and column. The previous program and its slots stay in place, and the previous program keeps running.
 
 A runtime error stops that scan. **Last Error** shows the line and message, and outputs are not written for that scan. The next scan runs again from the top. Runtime errors are division by zero (`/`, `\`, `MOD`), a negative `SQR`, `LN` or `LOG` of 0 or less, `ARCSIN` or `ARCCOS` outside -1..1, any other result that is NaN or infinite (for example `0 ^ -1` or `(-8) ^ 0.5`), an array index out of range, `RETURN` without `GOSUB`, and going over **Max Instructions Per Scan**. `ONERROR GOTO line` jumps to a handler instead.
 
