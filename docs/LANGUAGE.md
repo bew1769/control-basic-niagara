@@ -60,7 +60,7 @@ The block runs the program from the first statement every scan. Variables, timer
 
 ## Operators
 
-Highest to lowest, matching the KMC precedence table. Unary minus binds tighter than `^`, so `-2^2` is `-4`. `NOT` binds tighter than `^`, so `NOT A = 0` is `(NOT A) = 0`. Use parentheses when you mean `NOT (A = 0)`.
+Highest to lowest, matching the KMC precedence table. `^` binds tighter than a leading minus, so `-2^2` is `-4`. The exponent may carry its own sign, so `2 ^ -1` is 0.5, and `^` is right-associative (`2 ^ 3 ^ 2` is 512). `NOT` binds tighter than `^`, so `NOT A = 0` is `(NOT A) = 0`. Use parentheses when you mean `NOT (A = 0)`.
 
 `AND` and `OR` stop early, so `IF FAN AND 1/FAN > 0` is safe when `FAN` is 0. Comparisons and logic yield 1 or 0. Zero is false.
 
@@ -73,9 +73,19 @@ Highest to lowest, matching the KMC precedence table. Unary minus binds tighter 
 | `+`, `-` | add, subtract |
 | `<`, `>`, `<=`, `>=` | relational |
 | `=`, `<>` | equal, not equal |
-| `AND`, `OR`, `XOR` | logic |
+| `AND` | logic and |
+| `OR` | logic or |
+| `XOR` | logic exclusive or |
+
+`AND` binds tighter than `OR`, and `OR` tighter than `XOR`, so `1 OR 1 AND 0` is 1 and `1 XOR 1 OR 1` is 0. Operators on one row are evaluated left to right. Use parentheses whenever you mix logic operators.
 
 `00:07:00` and `8:30` are times in seconds (`HH:MM:SS` or `HH:MM`). `TIME` is seconds after midnight, so `TIME > 00:07:00` matches the KMC sample. `HOURS` is 3600, `MINUTES` is 60, `SECONDS` is 1.
+
+## Errors
+
+A compile error (syntax, `GOTO` to a missing line, `NEXT` without `FOR`, an unsupported statement, or `NAME(x)` where `NAME` is neither a function nor an array that is `DIM`med or assigned somewhere) sets **Last Error** with the line and column. The previous program and its slots stay in place.
+
+A runtime error stops that scan. **Last Error** shows the line and message, and outputs are not written for that scan. The next scan runs again from the top. Runtime errors are division by zero (`/`, `\`, `MOD`), a negative `SQR`, `LN` or `LOG` of 0 or less, `ARCSIN` or `ARCCOS` outside -1..1, any other result that is NaN or infinite (for example `0 ^ -1` or `(-8) ^ 0.5`), an array index out of range, `RETURN` without `GOSUB`, and going over **Max Instructions Per Scan**. `ONERROR GOTO line` jumps to a handler instead.
 
 ## Statements that run
 
@@ -91,7 +101,7 @@ Highest to lowest, matching the KMC precedence table. Unary minus binds tighter 
 
 | Function | Notes |
 | --- | --- |
-| `ABS` `SGN` `INT` `FIX` `FRAC` `ROUND` | `INT` is floor, so `INT(-1.2)` is -2. `FIX` truncates toward zero. `ROUND(x)` or `ROUND(x, digits)`. |
+| `ABS` `SGN` `INT` `FIX` `FRAC` `ROUND` | `INT` is floor, so `INT(-1.2)` is -2. `FIX` truncates toward zero. `ROUND(x)` or `ROUND(x, digits)`. Halves round away from zero: `ROUND(2.5)` is 3, `ROUND(-2.5)` is -3. |
 | `SQR` / `SQRT` `EXP` `LN` `LOG` / `LOG10` | `LOG` is base 10. `INVLN(x)` is `EXP(x)`. |
 | `SIN` `COS` `TAN` `ATN` / `ARCTAN` `ARCSIN` `ARCCOS` | Radians. `DEG` and `RAD` convert. |
 | `MIN` `MAX` | Two or more arguments. |
@@ -103,7 +113,7 @@ Highest to lowest, matching the KMC precedence table. Unary minus binds tighter 
 | `TIMEON` `TIMEOFF` | Seconds the variable has been continuously non-zero, or zero. Argument is a variable name. Wall clock, not scan count. |
 | `SENSORON` `SENSOROFF` | 1 on the scan the variable rises or falls. Same idea as KMC `SENSOR-ON` / `IF+`. |
 | `INTERVAL` | `INTERVAL(seconds)` is 1 on the first call and again after that many seconds. Each call site has its own timer. |
-| `PID` | `PID(pv, sp, kp, ki, kd)` or with `outMin, outMax`. Output is not a percent unless you clamp it. Each call site keeps its own integral. Anti-windup drops the last integral step when the output saturates. |
+| `PID` | `PID(pv, sp, kp, ki, kd)` or with `outMin, outMax`. Output is not a percent unless you clamp it. Each call site keeps its own integral. Anti-windup drops the last integral step when the output saturates. The derivative term is 0 on the first call after start or reset, so there is no derivative kick. |
 | `DEWPOINT` `DEWPOINTF` | Magnus formula, not a KMC firmware match. `DEWPOINT(tempC, rhPercent)` returns °C. `DEWPOINTF` takes and returns °F. |
 | `ENTHALPYSI` `ENTHALPY` | ASHRAE-style moist-air enthalpy at 101.325 kPa. SI is kJ/kg. `ENTHALPY` multiplies by 0.4299 to approximate Btu/lb. |
 | `RND` | `RND()` is 0..1. `RND(n)` is 0..n. |

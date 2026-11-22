@@ -89,6 +89,7 @@ public final class RuntimeState {
     static final class PidMark {
         double integral;
         double prevError;
+        boolean hasPrevError;
         long lastMillis;
         boolean started;
     }

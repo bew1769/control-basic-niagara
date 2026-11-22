@@ -603,7 +603,8 @@ final class Parser {
         Expr left = parseNot();
         if (check(TokenType.CARET)) {
             Token op = advance();
-            return new Expr.Binary(op.type, left, parsePow(), op.line, op.column);
+            // Right-associative, and the exponent may carry its own sign: 2 ^ -1.
+            return new Expr.Binary(op.type, left, parseUnary(), op.line, op.column);
         }
         return left;
     }

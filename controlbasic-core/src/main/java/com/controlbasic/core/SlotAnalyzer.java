@@ -10,6 +10,8 @@ final class SlotAnalyzer {
     private final Map<String, Use> uses = new LinkedHashMap<String, Use>();
     private final List<Diagnostic> errors = new ArrayList<Diagnostic>();
     private int order;
+    private final java.util.Set<String> arraysDefined = new java.util.HashSet<String>();
+    private final List<Expr.Index> arrayReads = new ArrayList<Expr.Index>();
 
     List<Diagnostic> errors() {
         return errors;
@@ -17,6 +19,14 @@ final class SlotAnalyzer {
 
     List<SlotSpec> analyze(List<Stmt> statements) {
         walk(statements);
+        // NAME(x) is a function call or an array element. A name that is not a
+        // function and is never DIMmed or assigned as an array is a typo
+        // (FOO(1)); report it at compile time instead of on every scan.
+        for (Expr.Index ix : arrayReads) {
+            if (!arraysDefined.contains(Functions.canon(ix.name))) {
+                errors.add(new Diagnostic(ix.line, ix.column, "Unknown function or array " + ix.name));
+            }
+        }
         List<SlotSpec> specs = new ArrayList<SlotSpec>();
         for (Use use : uses.values()) {
             if (use.array) {
@@ -52,6 +62,7 @@ final class SlotAnalyzer {
             } else if (s instanceof Stmt.ArrAssign) {
                 Stmt.ArrAssign a = (Stmt.ArrAssign) s;
                 markArray(a.name, a.line, a.column);
+                arraysDefined.add(Functions.canon(a.name));
                 walkExpr(a.index, true);
                 walkExpr(a.expr, true);
             } else if (s instanceof Stmt.If) {
@@ -82,6 +93,7 @@ final class SlotAnalyzer {
             } else if (s instanceof Stmt.Dim) {
                 Stmt.Dim d = (Stmt.Dim) s;
                 markArray(d.name, d.line, d.column);
+                arraysDefined.add(Functions.canon(d.name));
                 walkExpr(d.size, true);
             } else if (s instanceof Stmt.Declare) {
                 Stmt.Declare d = (Stmt.Declare) s;
@@ -108,6 +120,7 @@ final class SlotAnalyzer {
         if (e instanceof Expr.Index) {
             Expr.Index ix = (Expr.Index) e;
             markArray(ix.name, ix.line, ix.column);
+            arrayReads.add(ix);
             walkExpr(ix.index, true);
             return;
         }

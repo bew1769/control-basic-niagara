@@ -163,8 +163,22 @@ final class Evaluator {
         if (Functions.isConstant(key) || Functions.isNoArg(key) || key.equals("ON") || key.equals("OFF")) {
             throw fail(at == null ? new Expr.Num(0, 0, 0) : at, "Cannot assign " + name);
         }
+        requireFinite(value, at);
         rt.vars.put(key, Double.valueOf(value));
         return value;
+    }
+
+    /**
+     * A NaN or infinite result (ARCSIN(2), 0 ^ -1, an overflow) is a runtime
+     * error at the assignment, so it can never be written to an output slot.
+     */
+    private void requireFinite(double value, Expr at) {
+        if (Double.isNaN(value)) {
+            throw fail(at == null ? new Expr.Num(0, 0, 0) : at, "Result is not a number");
+        }
+        if (Double.isInfinite(value)) {
+            throw fail(at == null ? new Expr.Num(0, 0, 0) : at, "Result is infinite");
+        }
     }
 
     double readIndex(String name, double index, Expr at) {
@@ -194,6 +208,7 @@ final class Evaluator {
         if (idx < 1 || idx >= arr.length) {
             throw fail(at, "Index out of range for " + name);
         }
+        requireFinite(value, at);
         arr[idx] = value;
     }
 
@@ -250,8 +265,14 @@ final class Evaluator {
             case "ARCTAN":
                 return Math.atan(a[0]);
             case "ARCSIN":
+                if (a[0] < -1 || a[0] > 1) {
+                    throw fail(c, "ARCSIN argument must be between -1 and 1");
+                }
                 return Math.asin(a[0]);
             case "ARCCOS":
+                if (a[0] < -1 || a[0] > 1) {
+                    throw fail(c, "ARCCOS argument must be between -1 and 1");
+                }
                 return Math.acos(a[0]);
             case "SGN":
                 return Math.signum(a[0]);
@@ -422,8 +443,10 @@ final class Evaluator {
         m.lastMillis = now;
         double err = sp - pv;
         m.integral += err * dt;
-        double deriv = (err - m.prevError) / dt;
+        // No derivative kick: the first call has no previous error to differ from.
+        double deriv = m.hasPrevError ? (err - m.prevError) / dt : 0;
         m.prevError = err;
+        m.hasPrevError = true;
         double out = kp * err + ki * m.integral + kd * deriv;
         if (out > hi) {
             out = hi;
@@ -477,12 +500,17 @@ final class Evaluator {
         return v;
     }
 
+    /** Half away from zero, as a controller user expects: 2.5 is 3, -2.5 is -3. */
     private static double round(double[] a) {
         if (a.length == 1) {
-            return Math.rint(a[0]);
+            return halfAwayFromZero(a[0]);
         }
         double p = Math.pow(10, a[1]);
-        return Math.rint(a[0] * p) / p;
+        return halfAwayFromZero(a[0] * p) / p;
+    }
+
+    private static double halfAwayFromZero(double v) {
+        return Math.signum(v) * Math.floor(Math.abs(v) + 0.5);
     }
 
     private static double clamp(double v, double lo, double hi) {
