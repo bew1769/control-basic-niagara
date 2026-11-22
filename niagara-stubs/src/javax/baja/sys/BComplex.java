@@ -1,6 +1,10 @@
 package javax.baja.sys;
 
 public class BComplex extends BValue {
+    public String getName() {
+        return "";
+    }
+
     public Property[] getDynamicPropertiesArray() {
         return new Property[0];
     }

@@ -33,4 +33,11 @@ final class Instr {
     int c;
     int[] jumps;
     String[] texts;
+    /** HALT message. */
+    String text;
+    /**
+     * True for ONERROR and for statements that read ERRORLEVEL: a runtime
+     * error in the statement just before one of these does not stop the scan.
+     */
+    boolean recovers;
 }

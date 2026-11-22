@@ -10,6 +10,10 @@ public final class BBoolean extends BValue {
         this.value = value;
     }
 
+    public static BBoolean make(boolean value) {
+        return value ? TRUE : FALSE;
+    }
+
     public boolean getBoolean() {
         return value;
     }

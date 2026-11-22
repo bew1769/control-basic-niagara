@@ -158,8 +158,12 @@ public abstract class Stmt {
     }
 
     public static final class Halt extends Stmt {
-        public Halt(int line, int column) {
+        /** KMC {@code HALT "Message"}; null when no message was given. */
+        public final String message;
+
+        public Halt(String message, int line, int column) {
             super(line, column);
+            this.message = message;
         }
     }
 

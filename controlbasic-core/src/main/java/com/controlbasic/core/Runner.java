@@ -13,6 +13,7 @@ final class Runner {
         int ip = 0;
         int steps = 0;
         int limit = maxInstructions <= 0 ? 10000 : maxInstructions;
+        state.errorLevel = 0;
         try {
             while (ip >= 0 && ip < code.length) {
                 if (++steps > limit) {
@@ -22,16 +23,23 @@ final class Runner {
                 Instr in = code[ip];
                 try {
                     ip = step(in, ip, code, ev, state);
+                    if (in.op != Instr.GOTO) {
+                        state.errorLevel = 0;
+                    }
                 } catch (Evaluator.Fail fail) {
-                    if (state.onErrorIp >= 0 && !state.inHandler) {
-                        state.inHandler = true;
-                        ip = state.onErrorIp;
+                    // KMC: ONERROR / ERRORLEVEL act on an error "in the previous
+                    // line" (Connect Rev N, ONERROR and ERRORLEVEL). Without one
+                    // of them right after, the error stops the scan.
+                    int next = nextStatement(in, ip, code);
+                    if (next >= 0 && next < code.length && code[next].recovers) {
+                        state.errorLevel = 1;
+                        state.handledError = "Line " + fail.line + ": " + fail.getMessage();
+                        ip = next;
                         continue;
                     }
                     throw fail;
                 }
             }
-            state.inHandler = false;
             ev.commitLevels();
             return new Scan(null, state.halted, steps);
         } catch (Evaluator.Fail fail) {
@@ -69,8 +77,11 @@ final class Runner {
             case Instr.ON:
                 return onBranch(in, ip, ev);
             case Instr.ONERR:
-                state.onErrorIp = in.a;
-                state.inHandler = false;
+                // ONERROR location: jump when the previous statement failed.
+                // ONERROR OFF (a = -1) is accepted and does nothing.
+                if (state.errorLevel != 0 && in.a >= 0) {
+                    return in.a;
+                }
                 return ip + 1;
             case Instr.SET:
                 ev.writeVar(in.name, in.a == 1 ? 1 : 0, new Expr.Num(0, in.line, in.column));
@@ -79,6 +90,7 @@ final class Runner {
                 return code.length;
             case Instr.HALT:
                 state.halted = true;
+                state.haltMessage = in.text;
                 return code.length;
             case Instr.PRINT:
                 print(in, ev, state);
@@ -89,6 +101,35 @@ final class Runner {
             default:
                 throw new Evaluator.Fail(in.line, in.column, "Bad instruction");
         }
+    }
+
+    /**
+     * The instruction after the source statement at {@code ip}, following the
+     * jumps an IF leaves behind; -1 when the statement cannot be resumed.
+     */
+    private static int nextStatement(Instr in, int ip, Instr[] code) {
+        int next;
+        switch (in.op) {
+            case Instr.ASSIGN:
+            case Instr.ARR:
+            case Instr.SET:
+            case Instr.PRINT:
+            case Instr.DIM:
+                next = ip + 1;
+                break;
+            case Instr.IF:
+                next = in.c - 1 >= 0 && in.c - 1 < code.length && code[in.c - 1].op == Instr.GOTO
+                        ? code[in.c - 1].a : -1;
+                break;
+            default:
+                return -1;
+        }
+        int guard = 0;
+        while (next >= 0 && next < code.length && code[next].op == Instr.GOTO && code[next].name == null
+                && guard++ < code.length) {
+            next = code[next].a;
+        }
+        return next;
     }
 
     private static int branch(Instr in, int ip, Evaluator ev, RuntimeState state) {

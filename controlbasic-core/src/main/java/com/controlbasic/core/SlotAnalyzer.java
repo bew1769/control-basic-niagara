@@ -117,6 +117,12 @@ final class SlotAnalyzer {
             }
             return;
         }
+        if (e instanceof Expr.Prop) {
+            // point.FAULT and friends read the point, so it gets an input slot.
+            Use u = use(((Expr.Prop) e).name, e.line, e.column);
+            u.read = true;
+            return;
+        }
         if (e instanceof Expr.Index) {
             Expr.Index ix = (Expr.Index) e;
             markArray(ix.name, ix.line, ix.column);

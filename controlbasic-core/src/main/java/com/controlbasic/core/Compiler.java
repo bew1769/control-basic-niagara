@@ -156,7 +156,9 @@ final class Compiler {
             return;
         }
         if (s instanceof Stmt.Halt) {
-            code.add(instr(Instr.HALT, s));
+            Instr in = instr(Instr.HALT, s);
+            in.text = ((Stmt.Halt) s).message;
+            code.add(in);
             return;
         }
         if (s instanceof Stmt.Print) {
@@ -207,6 +209,13 @@ final class Compiler {
     private void resolve() {
         for (int i = 0; i < code.size(); i++) {
             Instr in = code.get(i);
+            in.recovers = in.op == Instr.ONERR || readsErrorLevel(in.expr) || readsErrorLevel(in.expr2)
+                    || readsErrorLevel(in.expr3);
+            if (in.items != null) {
+                for (Expr item : in.items) {
+                    in.recovers |= readsErrorLevel(item);
+                }
+            }
             if (in.op == Instr.GOTO && in.name != null) {
                 in.a = resolveTarget(in.name, in);
             } else if (in.op == Instr.GOSUB) {
@@ -248,6 +257,37 @@ final class Compiler {
             return 0;
         }
         return ip.intValue();
+    }
+
+    private static boolean readsErrorLevel(Expr e) {
+        if (e == null) {
+            return false;
+        }
+        if (e instanceof Expr.Var) {
+            return "ERRORLEVEL".equals(Functions.canon(((Expr.Var) e).name));
+        }
+        if (e instanceof Expr.Call) {
+            Expr.Call c = (Expr.Call) e;
+            if ("ERRORLEVEL".equals(Functions.canon(c.name))) {
+                return true;
+            }
+            for (Expr arg : c.args) {
+                if (readsErrorLevel(arg)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        if (e instanceof Expr.Unary) {
+            return readsErrorLevel(((Expr.Unary) e).expr);
+        }
+        if (e instanceof Expr.Binary) {
+            return readsErrorLevel(((Expr.Binary) e).left) || readsErrorLevel(((Expr.Binary) e).right);
+        }
+        if (e instanceof Expr.Index) {
+            return readsErrorLevel(((Expr.Index) e).index);
+        }
+        return false;
     }
 
     private void checkAssign(String name, Stmt at) {

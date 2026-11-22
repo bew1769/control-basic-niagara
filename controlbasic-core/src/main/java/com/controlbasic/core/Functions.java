@@ -40,6 +40,8 @@ final class Functions {
             case "RAD":
             case "MIN":
             case "MAX":
+            case "AVG":
+            case "ISNAN":
             case "ROUND":
             case "MOD":
             case "LIMIT":
@@ -60,11 +62,13 @@ final class Functions {
             case "YEAR":
             case "SCAN":
             case "SCANS":
+            case "SCANCOUNT":
+            case "ERRORLEVEL":
             case "FIRST":
             case "INTERVAL":
             case "PID":
             case "DEWPOINT":
-            case "DEWPOINTF":
+            case "DEWPOINTSI":
             case "ENTHALPY":
             case "ENTHALPYSI":
                 return true;
@@ -87,6 +91,11 @@ final class Functions {
             case "MAX":
                 if (argc < 2) {
                     return name + " expects at least 2 arguments";
+                }
+                return null;
+            case "AVG":
+                if (argc < 1) {
+                    return "AVG expects at least 1 argument";
                 }
                 return null;
             case "ROUND":
@@ -116,6 +125,8 @@ final class Functions {
             case "YEAR":
             case "SCAN":
             case "SCANS":
+            case "SCANCOUNT":
+            case "ERRORLEVEL":
             case "FIRST":
                 if (argc != 0) {
                     return name + " does not take arguments";
@@ -135,7 +146,7 @@ final class Functions {
             case "MOD":
             case "TBL":
             case "DEWPOINT":
-            case "DEWPOINTF":
+            case "DEWPOINTSI":
             case "ENTHALPY":
             case "ENTHALPYSI":
                 return 2;
@@ -145,6 +156,7 @@ final class Functions {
             case "SCALE":
                 return 5;
             case "INTERVAL":
+            case "ISNAN":
             case "ABS":
             case "INT":
             case "FIX":
@@ -186,6 +198,8 @@ final class Functions {
             case "YEAR":
             case "SCAN":
             case "SCANS":
+            case "SCANCOUNT":
+            case "ERRORLEVEL":
             case "FIRST":
                 return true;
             default:
@@ -205,6 +219,16 @@ final class Functions {
             case "FALSE":
             case "YES":
             case "NO":
+            case "NAN":
+            case "POS_INFINITY":
+            case "NEG_INFINITY":
+            case "MON":
+            case "TUE":
+            case "WED":
+            case "THU":
+            case "FRI":
+            case "SAT":
+            case "SUN":
                 return true;
             default:
                 return false;
@@ -229,6 +253,27 @@ final class Functions {
             case "FALSE":
             case "NO":
                 return 0;
+            case "NAN":
+                return Double.NaN;
+            case "POS_INFINITY":
+                return Double.POSITIVE_INFINITY;
+            case "NEG_INFINITY":
+                return Double.NEGATIVE_INFINITY;
+            // KMC: Monday is day 1, Sunday is day 7 (KMC BACnet Module Rev E, DOW).
+            case "MON":
+                return 1;
+            case "TUE":
+                return 2;
+            case "WED":
+                return 3;
+            case "THU":
+                return 4;
+            case "FRI":
+                return 5;
+            case "SAT":
+                return 6;
+            case "SUN":
+                return 7;
             default:
                 return 0;
         }

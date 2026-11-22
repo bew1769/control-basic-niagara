@@ -10,6 +10,9 @@ public class BComponent extends BComplex {
     public void changed(Property property, Context cx) {
     }
 
+    public void atSteadyState() throws Exception {
+    }
+
     public boolean isRunning() {
         return false;
     }

@@ -8,4 +8,13 @@ public interface PointImage {
     double get(String canonicalName);
 
     void set(String canonicalName, double value);
+
+    /** {@link PointStatus} bits of an input slot. */
+    default int status(String canonicalName) {
+        return PointStatus.OK;
+    }
+
+    /** Sets the {@link PointStatus} bits of an output or variable slot. */
+    default void setStatus(String canonicalName, int bits) {
+    }
 }

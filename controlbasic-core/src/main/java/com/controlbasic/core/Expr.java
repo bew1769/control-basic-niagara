@@ -40,6 +40,18 @@ public abstract class Expr {
         }
     }
 
+    /** {@code point.PROPERTY}: a status flag, the raw status, or the value. */
+    public static final class Prop extends Expr {
+        public final String name;
+        public final String property;
+
+        public Prop(String name, String property, int line, int column) {
+            super(line, column);
+            this.name = name;
+            this.property = property;
+        }
+    }
+
     public static final class Index extends Expr {
         public final String name;
         public final Expr index;

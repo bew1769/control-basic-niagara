@@ -121,8 +121,25 @@ A new block's program is `examples/damper.cb`. After the first successful compil
 4. **Compile** checks the buffer and does not write it. **Save** stores the program, recompiles, and rebuilds slots.
 5. Link inputs and outputs like any other block. `scanInterval` defaults to 1 second. `maxInstructions` defaults to 10000. `lastError` is the fault text. `console` is what `PRINT` wrote. **Reset** clears variables, timers, and a `HALT`.
 6. Table 1..4 are optional `x,y; x,y` lists for `TBL(x, n)`.
+7. The block shows its own **Status** (`{ok}`, `{fault}`, `{disabled}`), **Program State** (`RUNNING`, `HALTED`, `IDLE`) and **Reliability** (`NO_FAULT_DETECTED`, `PROCESS_ERROR`), modelled on the KMC/BACnet Program object.
+8. A bad edit (a program that does not compile), a runtime error, or a `HALT` faults the block. **Last Error** shows the message with its line (`Compile error: Line 3: … (still running the last program that compiled)`), the `controlBasic` logger writes a WARNING, and a Niagara fault alarm with that text is routed to the alarm class in **Alarm Source Info** (`defaultAlarmClass` by default). The alarm returns to normal when the program compiles and scans cleanly again. The station needs an AlarmService for the alarm; the log line and Last Error appear either way.
+9. Programs read input status with KMC's `object.property` form: `AI1.FAULT`, `AI1.OVERRIDDEN`, `AI1.IN_ALARM`, `AI1.OUT_OF_SERVICE`, plus `AI1.NULL`, `AI1.DOWN`, `AI1.STALE` and `AI1.STATUS`. A null input reads as `NAN` (`ISNAN(AI1)`). Outputs are ok after a clean scan, null when the value is `NAN`, fault after a runtime error or `HALT`, and disabled when the block is disabled. See `docs/LANGUAGE.md` for the details and the KMC page references.
+
+The language follows the KMC Connect Reference Guide Rev N and the KMC BACnet Module for NiagaraAX Rev E: operator precedence and left-to-right evaluation, `SCANS` as scans per second, `RND(n)` as 0…n-1, `DOW` Monday = 1, KMC's 366-day `DOY`, humidity-first `DEWPOINT`/`ENTHALPY` in °F and Btu/lb with `…SI` variants, `ONERROR` and `ERRORLEVEL` acting on the previous statement, `HALT "message"`, `INC`/`DEC`, `AVG`, `NAN`, `ISNAN`, and the infinities. `docs/LANGUAGE.md` lists the sources, every extension, and what the manuals leave open.
 
 The scan does not run on the station engine thread. A clock ticket wakes a single daemon thread. If a scan is still going, the next tick is skipped.
+
+## Status, alarms and KMC behavior on a running station (Windows, 4.15.6.20)
+
+Checked on a scratch station with an AlarmService (`defaultAlarmClass`) on 2026-11-22:
+
+- Inputs with null, fault, overridden, alarm+disabled status, and an input linked from a null source: `ISNAN(AI1_Null)` = 1, `AI2_Flt.FAULT` = 1, `AI3_Ovr.OVERRIDDEN` = 1, `AI3_Ovr.STATUS` = 32, `AI4_FromNull.NULL` = 1, `IN_ALARM * 10 + OUT_OF_SERVICE` = 11. `AI1_Null * 2` wrote NaN with status `{null}`; `AI2_Flt + 1` wrote 61 with status ok (no propagation); a boolean output from a null input went `{null}`.
+- A runtime error (`10 / 0`) left the output's value and set it `{fault}`; the block showed status fault, Reliability PROCESS_ERROR, and `Runtime error: Line 1: Division by zero`.
+- `HALT "Low pressure"`: Program State HALTED, status fault, `Halted: Low pressure`, output `{fault}`.
+- A disabled block: status `{disabled}`, its output `{disabled}`.
+- `ONERROR` after a failing line ran the handler every scan without faulting the block; `ERRORLEVEL` read 1 after a failed `SQR`.
+- Precedence and KMC functions on the station: `NOT 2 ^ 2` = 0, `NOT 0 + 1` = 2, `2 ^ 3 ^ 2` = 64, `7 \ 2 * 2` = 1, `9 MOD 4 \ 2` = 1, `1 OR 1 AND 0` = 1, `1 XOR 1 OR 1` = 0, `0 = 0 AND 0` = 0, `DOW` = 7 on a Sunday, `DOY` = 327 on November 22, `SCANS` ≈ 0.99 at a 1 s interval.
+- A program switched every 20 s between a good and a bad version: each bad edit logged `WARNING [controlBasic] Control Basic CBBad: Compile error: Line 2: Expected an expression (still running the last program that compiled)` and `fault alarm sent to defaultAlarmClass`, and each fix logged `fault cleared` and `fault alarm returned to normal`. The alarm database held the fault records with that `msgText` and source `slot:/Test/CBT/CBBad`, followed by the normal records.
 
 ## What was verified on Niagara 4.15.6.20
 
@@ -164,4 +181,4 @@ javax.baja.license.FeatureNotLicensedException: tridium:nre
 
 The block was not instantiated, a program was not scanned, and dynamic slots were not observed on a running station. Workbench was not started. Those checks need a license that includes the `tridium:nre` feature, plus the dev certificate in that host's user trust store.
 
-Line-numbered programs are the form this module is written for. Labels and `ENDIF` still parse. `DEWPOINT` and `ENTHALPY` use the formulas in `docs/LANGUAGE.md`, not a KMC firmware.
+Line-numbered programs are the form this module is written for. Labels and `ENDIF` still parse. `DEWPOINT` and `ENTHALPY` take KMC's arguments and units; the formulas (Magnus dew point, ASHRAE moist-air enthalpy) are in `docs/LANGUAGE.md`, since KMC does not publish its firmware's.

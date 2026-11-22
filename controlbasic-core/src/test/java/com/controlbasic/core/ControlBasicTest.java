@@ -133,7 +133,7 @@ class ControlBasicTest {
     void variablesPersistAndFirstScan() {
         Compilation program = compile(
                 "10 IF FIRST THEN A = 1 ELSE A = A + 1\n"
-                        + "20 B = SCANS\n");
+                        + "20 B = SCANCOUNT\n");
         RuntimeState rt = new RuntimeState();
         ControlBasic.run(program, rt, 1000);
         ControlBasic.run(program, rt, 1000);
@@ -261,7 +261,7 @@ class ControlBasicTest {
                         + "40 IF BI1_OccSts THEN START BO1_SaFanCmd ELSE STOP BO1_SaFanCmd\n"
                         + "50 IF BO1_SaFanCmd AND AI1_SaTmp > AV2_SaTmpSpt THEN AO1_ClgVlvPos = LIMIT(SCALE(AI1_SaTmp, AV2_SaTmpSpt, AV2_SaTmpSpt + 8, 0, 100), 0, 100) ELSE AO1_ClgVlvPos = 0\n"
                         + "60 IF AI2_OaTmp < 55 AND BI1_OccSts THEN START BO2_EconEna ELSE STOP BO2_EconEna\n"
-                        + "70 IF TIME > 07:00:00 AND TIME < 18:00:00 AND DOW > 1 AND DOW < 7 THEN BV1_SchdOcc = 1 ELSE BV1_SchdOcc = 0\n"
+                        + "70 IF TIME > 07:00:00 AND TIME < 18:00:00 AND DOW >= MON AND DOW <= FRI THEN BV1_SchdOcc = 1 ELSE BV1_SchdOcc = 0\n"
                         + "80 END\n");
         RuntimeState rt = new RuntimeState();
         rt.time = clock;
@@ -366,14 +366,15 @@ class ControlBasicTest {
     }
 
     @Test
-    void dowSundayIsOne() {
+    void dowMondayIsOneSundayIsSeven() {
         FakeClock clock = new FakeClock();
         clock.zoned = ZonedDateTime.of(2026, 11, 22, 12, 0, 0, 0, ZoneId.of("UTC"));
         Compilation program = compile("10 D = DOW\n20 M = DOM\n");
         RuntimeState rt = new RuntimeState();
         rt.time = clock;
         ControlBasic.run(program, rt, 100);
-        assertEquals(1, rt.getVar("D"), 0);
+        // 2026-11-22 is a Sunday; KMC numbers it 7.
+        assertEquals(7, rt.getVar("D"), 0);
         assertEquals(22, rt.getVar("M"), 0);
     }
 
@@ -399,6 +400,10 @@ class ControlBasicTest {
             millis += seconds * 1000L;
         }
 
+        void plusMillis(long ms) {
+            millis += ms;
+        }
+
         @Override
         public long nowMillis() {
             return millis;
@@ -422,6 +427,19 @@ class ControlBasicTest {
         @Override
         public void set(String canonicalName, double value) {
             values.put(canonicalName, Double.valueOf(value));
+        }
+
+        final Map<String, Integer> statuses = new LinkedHashMap<String, Integer>();
+
+        @Override
+        public int status(String canonicalName) {
+            Integer s = statuses.get(canonicalName);
+            return s == null ? 0 : s.intValue();
+        }
+
+        @Override
+        public void setStatus(String canonicalName, int bits) {
+            statuses.put(canonicalName, Integer.valueOf(bits));
         }
     }
 }

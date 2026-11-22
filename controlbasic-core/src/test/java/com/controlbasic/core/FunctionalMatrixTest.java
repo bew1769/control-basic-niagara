@@ -83,7 +83,7 @@ class FunctionalMatrixTest {
         rows.add(r("negative exponent", "10 A = 2 ^ -1", "A", 0.5));
         rows.add(r("negative exponent then multiply", "10 A = 2 ^ -1 * 4", "A", 2));
         rows.add(r("leading minus on power", "10 A = -2 ^ 2", "A", -4));
-        rows.add(r("power right-assoc", "10 A = 2 ^ 3 ^ 2", "A", 512));
+        rows.add(r("power left to right (KMC same level)", "10 A = 2 ^ 3 ^ 2", "A", 64));
         rows.add(r("AND binds tighter than OR", "10 A = 1 OR 1 AND 0", "A", 1));
         rows.add(r("OR binds tighter than XOR", "10 A = 1 XOR 1 OR 1", "A", 0));
         rows.add(r("XOR left to right", "10 A = 1 XOR 1 XOR 1", "A", 1));
@@ -142,14 +142,17 @@ class FunctionalMatrixTest {
         rows.add(r("HOURS/MINUTES", "10 A = HOURS + MINUTES + SECONDS", "A", 3661));
         rows.add(r("time literal HH:MM", "10 A = 8:30", "A", 30600));
         rows.add(r("time literal HH:MM:SS", "10 A = 00:07:00", "A", 420));
-        rows.add(r("DEWPOINT 20C 50%", "10 A = DEWPOINT(20, 50)", "A", 9.26, 0.05));
-        rows.add(r("ENTHALPYSI 20C 50%", "10 A = ENTHALPYSI(20, 50)", "A", 38.5, 0.3));
+        rows.add(r("DEWPOINTSI 50% 20C", "10 A = DEWPOINTSI(50, 20)", "A", 9.26, 0.05));
+        rows.add(r("DEWPOINT 50% 68F", "10 A = DEWPOINT(50, 68)", "A", 48.67, 0.1));
+        rows.add(r("ENTHALPYSI 50% 20C", "10 A = ENTHALPYSI(50, 20)", "A", 38.5, 0.3));
+        rows.add(r("ENTHALPY 50% 68F Btu/lb", "10 A = ENTHALPY(50, 68)", "A", 24.23, 0.1));
         rows.add(r("PID proportional", "10 A = PID(70, 72, 2, 0, 0)", "A", 4));
         rows.add(r("PID clamps", "10 A = PID(60, 72, 20, 0, 0, 0, 100)", "A", 100));
         rows.add(r("PID no derivative kick on first scan", "10 A = PID(70, 72, 2, 0, 1)", "A", 4));
-        rows.add(r("RND range", "10 A = RND(10) >= 0 AND RND(10) <= 10", "A", 1));
+        rows.add(r("RND range", "10 A = RND(10) >= 0 AND RND(10) <= 9 AND FRAC(RND(10)) = 0", "A", 1));
         rows.add(r("FIRST on first scan", "10 A = FIRST", "A", 1));
-        rows.add(r("SCANS on first scan", "10 A = SCANS", "A", 1));
+        rows.add(r("SCANS rate on first scan is 1 / interval", "10 A = SCANS", "A", 1));
+        rows.add(r("SCANCOUNT on first scan", "10 A = SCANCOUNT", "A", 1));
         return rows;
     }
 
@@ -286,22 +289,21 @@ class FunctionalMatrixTest {
     }
 
     @Test
-    void onErrorHandlerRecoversEveryScan() {
-        String program = "10 ONERROR GOTO 100\n20 A = 1 / D\n30 END\n100 E = E + 1\n110 A = 1 / D\n120 END";
+    void onErrorRecoversEveryScan() {
+        // KMC: ONERROR goes after the statement it guards.
+        String program = "10 A = 1 / D\n20 ONERROR 100\n30 END\n100 E = E + 1\n120 END";
         RuntimeState rt = new RuntimeState();
         Compilation c = ControlBasic.compile(program);
         assertTrue(c.ok(), c.diagnostics().toString());
-        // Scan 1: the handler itself fails. Scan 2 must still enter the handler.
-        ControlBasic.run(c, rt, 1000);
-        double afterFirst = rt.getVar("E");
-        ControlBasic.run(c, rt, 1000);
-        assertEquals(afterFirst + 1, rt.getVar("E"), 0, "ONERROR handler not entered on the next scan");
+        assertNull(ControlBasic.run(c, rt, 1000).error);
+        assertNull(ControlBasic.run(c, rt, 1000).error);
+        assertEquals(2, rt.getVar("E"), 0, "ONERROR target not reached on every scan");
     }
 
     @Test
-    void onErrorHandlerCatchesDivideByZero() {
+    void onErrorCatchesDivideByZero() {
         RuntimeState rt = new RuntimeState();
-        Scan s = scanOnce("10 ONERROR GOTO 100\n20 A = 1 / 0\n30 END\n100 B = 5", rt);
+        Scan s = scanOnce("10 A = 1 / 0\n20 ONERROR GOTO 100\n30 END\n100 B = 5", rt);
         assertNull(s.error);
         assertEquals(5, rt.getVar("B"), 0);
     }

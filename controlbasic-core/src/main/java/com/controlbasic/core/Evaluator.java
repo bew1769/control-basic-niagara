@@ -38,6 +38,9 @@ final class Evaluator {
             Expr.Index ix = (Expr.Index) e;
             return readIndex(ix.name, eval(ix.index), e);
         }
+        if (e instanceof Expr.Prop) {
+            return prop((Expr.Prop) e);
+        }
         if (e instanceof Expr.Unary) {
             Expr.Unary u = (Expr.Unary) e;
             double v = eval(u.expr);
@@ -94,36 +97,39 @@ final class Evaluator {
         }
         double l = eval(b.left);
         double r = eval(b.right);
+        boolean nan = Double.isNaN(l) || Double.isNaN(r);
         switch (b.op) {
             case XOR:
                 return truth(l) ^ truth(r) ? 1 : 0;
             case PLUS:
-                return l + r;
+                return checked(b, l, r, l + r);
             case MINUS:
-                return l - r;
+                return checked(b, l, r, l - r);
             case STAR:
-                return l * r;
+                return checked(b, l, r, l * r);
             case SLASH:
                 if (r == 0) {
                     throw fail(b, "Division by zero");
                 }
-                return l / r;
+                return checked(b, l, r, l / r);
             case BACKSLASH:
                 if (r == 0) {
                     throw fail(b, "Division by zero");
                 }
-                return (long) (l / r);
+                return nan ? Double.NaN : (long) (l / r);
             case MOD:
                 if (r == 0) {
                     throw fail(b, "Division by zero");
                 }
-                return l - r * (long) (l / r);
+                return nan ? Double.NaN : l - r * (long) (l / r);
             case CARET:
-                return Math.pow(l, r);
+                return checked(b, l, r, Math.pow(l, r));
+            // KMC: "IF A <> NAN" tests for Not A Number (Connect Rev N, NAN), so
+            // NAN = NAN is true here, unlike IEEE.
             case EQ:
-                return l == r ? 1 : 0;
+                return (l == r || (Double.isNaN(l) && Double.isNaN(r))) ? 1 : 0;
             case NE:
-                return l != r ? 1 : 0;
+                return (l == r || (Double.isNaN(l) && Double.isNaN(r))) ? 0 : 1;
             case LT:
                 return l < r ? 1 : 0;
             case GT:
@@ -135,6 +141,48 @@ final class Evaluator {
             default:
                 throw fail(b, "Bad operator");
         }
+    }
+
+    /**
+     * NAN and the infinities may be stored and passed on (KMC NAN, ISNAN,
+     * POS_INFINITY), but arithmetic that turns finite numbers into one of them
+     * (0 ^ -1, (-8) ^ 0.5, an overflow) is a runtime error.
+     */
+    private static double checked(Expr at, double l, double r, double result) {
+        if (Double.isNaN(result) || Double.isInfinite(result)) {
+            boolean finiteIn = !Double.isNaN(l) && !Double.isInfinite(l) && !Double.isNaN(r) && !Double.isInfinite(r);
+            if (finiteIn) {
+                throw fail(at, Double.isNaN(result) ? "Result is not a number" : "Result is infinite");
+            }
+        }
+        return result;
+    }
+
+    /** {@code point.FAULT}, {@code point.STATUS}, {@code point.PV} and the other flags. */
+    private double prop(Expr.Prop p) {
+        int mask = PointStatus.propertyMask(p.property);
+        if (mask == -2) {
+            return readVar(p.name, p);
+        }
+        int bits = statusOf(p.name);
+        if (mask == -1) {
+            return bits;
+        }
+        if (mask == 0) {
+            throw fail(p, "Unknown property ." + p.property);
+        }
+        return (bits & mask) != 0 ? 1 : 0;
+    }
+
+    /** Status of a slot as read this scan; a plain variable is null only when it holds NAN. */
+    int statusOf(String name) {
+        String key = Functions.canon(name);
+        Integer bits = rt.statuses.get(key);
+        if (bits != null) {
+            return bits.intValue();
+        }
+        Double v = rt.vars.get(key);
+        return v != null && Double.isNaN(v.doubleValue()) ? PointStatus.NULL : PointStatus.OK;
     }
 
     private double readVar(String name, Expr at) {
@@ -163,22 +211,8 @@ final class Evaluator {
         if (Functions.isConstant(key) || Functions.isNoArg(key) || key.equals("ON") || key.equals("OFF")) {
             throw fail(at == null ? new Expr.Num(0, 0, 0) : at, "Cannot assign " + name);
         }
-        requireFinite(value, at);
         rt.vars.put(key, Double.valueOf(value));
         return value;
-    }
-
-    /**
-     * A NaN or infinite result (ARCSIN(2), 0 ^ -1, an overflow) is a runtime
-     * error at the assignment, so it can never be written to an output slot.
-     */
-    private void requireFinite(double value, Expr at) {
-        if (Double.isNaN(value)) {
-            throw fail(at == null ? new Expr.Num(0, 0, 0) : at, "Result is not a number");
-        }
-        if (Double.isInfinite(value)) {
-            throw fail(at == null ? new Expr.Num(0, 0, 0) : at, "Result is infinite");
-        }
     }
 
     double readIndex(String name, double index, Expr at) {
@@ -208,7 +242,6 @@ final class Evaluator {
         if (idx < 1 || idx >= arr.length) {
             throw fail(at, "Index out of range for " + name);
         }
-        requireFinite(value, at);
         arr[idx] = value;
     }
 
@@ -286,6 +319,15 @@ final class Evaluator {
                 return minmax(a, false);
             case "MAX":
                 return minmax(a, true);
+            case "AVG": {
+                double sum = 0;
+                for (double v : a) {
+                    sum += v;
+                }
+                return sum / a.length;
+            }
+            case "ISNAN":
+                return Double.isNaN(a[0]) ? 1 : 0;
             case "ROUND":
                 return round(a);
             case "MOD":
@@ -306,7 +348,8 @@ final class Evaluator {
                 if (a.length == 0) {
                     return rt.random.nextDouble();
                 }
-                return rt.random.nextDouble() * a[0];
+                // KMC: "a random number between 0 and expression-1" (Connect Rev N, RND).
+                return Math.floor(rt.random.nextDouble() * a[0]);
             case "TIMEON":
                 return elapsed(c, true);
             case "TIMEOFF":
@@ -319,14 +362,17 @@ final class Evaluator {
                 return interval(c, a[0]);
             case "PID":
                 return pid(c, a);
+            // KMC argument order is (OAH, OAT): humidity first (Connect Rev N,
+            // DEWPOINT, DEWPOINTSI, ENTHALPY, ENTHALPYSI). The plain names are
+            // degrees F / Btu per lb; the SI names are degrees C / kJ per kg.
             case "DEWPOINT":
-                return dewC(a[0], a[1]);
-            case "DEWPOINTF":
-                return dewC((a[0] - 32.0) * 5.0 / 9.0, a[1]) * 9.0 / 5.0 + 32.0;
+                return dewC(fToC(a[1]), a[0]) * 9.0 / 5.0 + 32.0;
+            case "DEWPOINTSI":
+                return dewC(a[1], a[0]);
             case "ENTHALPYSI":
-                return enthalpy(a[0], a[1]);
+                return enthalpy(a[1], a[0]);
             case "ENTHALPY":
-                return enthalpy(a[0], a[1]) * 0.4299226;
+                return 0.240 * a[1] + humidityRatio(fToC(a[1]), a[0]) * (1061.0 + 0.444 * a[1]);
             case "TIME":
             case "DOW":
             case "DOM":
@@ -335,6 +381,8 @@ final class Evaluator {
             case "YEAR":
             case "SCAN":
             case "SCANS":
+            case "SCANCOUNT":
+            case "ERRORLEVEL":
             case "FIRST":
                 return noArg(name, c);
             default:
@@ -464,13 +512,12 @@ final class Evaluator {
             case "TIME":
                 return z.getHour() * 3600.0 + z.getMinute() * 60.0 + z.getSecond() + z.getNano() / 1e9;
             case "DOW":
-                // Sunday = 1 ... Saturday = 7. java DayOfWeek Monday = 1.
-                int dow = z.getDayOfWeek().getValue();
-                return dow == 7 ? 1 : dow + 1;
+                // KMC: Monday is day 1, Sunday is day 7 (BACnet Module Rev E, DOW).
+                return z.getDayOfWeek().getValue();
             case "DOM":
                 return z.getDayOfMonth();
             case "DOY":
-                return z.getDayOfYear();
+                return kmcDayOfYear(z.getMonthValue(), z.getDayOfMonth());
             case "MONTH":
                 return z.getMonthValue();
             case "YEAR":
@@ -478,12 +525,31 @@ final class Evaluator {
             case "SCAN":
                 return rt.scanIntervalSeconds;
             case "SCANS":
+                // KMC: "the rate ... in scans per second" (Connect Rev N, SCANS).
+                return rt.scanRate;
+            case "SCANCOUNT":
                 return rt.scans;
+            case "ERRORLEVEL":
+                return rt.errorLevel;
             case "FIRST":
                 return rt.scans == 1 ? 1 : 0;
             default:
                 throw fail(at, "Unknown value " + name);
         }
+    }
+
+    private static final int[] DAYS_BEFORE = {0, 31, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335};
+
+    /**
+     * KMC counts February as 29 days every year: March 1 is always day 61 and
+     * December 31 day 366; day 60 is skipped in non-leap years (Connect Rev N, DOY).
+     */
+    static int kmcDayOfYear(int month, int dayOfMonth) {
+        return DAYS_BEFORE[month - 1] + dayOfMonth;
+    }
+
+    private static double fToC(double f) {
+        return (f - 32.0) * 5.0 / 9.0;
     }
 
     private static double minmax(double[] a, boolean max) {
@@ -597,15 +663,20 @@ final class Evaluator {
         return (b * gamma) / (a - gamma);
     }
 
-    /** Moist-air enthalpy, kJ/kg dry air, at 101.325 kPa. */
-    static double enthalpy(double tempC, double rh) {
+    /** Humidity ratio, kg water per kg dry air (same as lb/lb), at 101.325 kPa. */
+    static double humidityRatio(double tempC, double rh) {
         double es = 0.61094 * Math.exp((17.625 * tempC) / (tempC + 243.04));
         double e = Math.max(0, Math.min(100, rh)) / 100.0 * es;
         double p = 101.325;
         if (e >= p) {
             e = p * 0.99;
         }
-        double w = 0.62198 * e / (p - e);
+        return 0.62198 * e / (p - e);
+    }
+
+    /** Moist-air enthalpy, kJ/kg dry air, at 101.325 kPa. */
+    static double enthalpy(double tempC, double rh) {
+        double w = humidityRatio(tempC, rh);
         return 1.006 * tempC + w * (2501 + 1.86 * tempC);
     }
 

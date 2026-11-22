@@ -17,3 +17,7 @@ controlBasic.ControlBasicBlock.table4=Table 4
 controlBasic.ControlBasicBlock.compile=Compile
 controlBasic.ControlBasicBlock.reset=Reset
 controlBasic.ControlBasicEditor=Control Basic Editor
+controlBasic.ControlBasicBlock.status=Status
+controlBasic.ControlBasicBlock.programState=Program State
+controlBasic.ControlBasicBlock.reliability=Reliability
+controlBasic.ControlBasicBlock.alarmSourceInfo=Alarm Source Info

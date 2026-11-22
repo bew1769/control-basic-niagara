@@ -21,11 +21,18 @@ public final class RuntimeState {
     final Map<Integer, double[][]> tables = new HashMap<Integer, double[][]>();
     final Random random = new Random();
     final StringBuilder console = new StringBuilder();
+    /** Status bits of each slot as read at the start of this scan. */
+    final Map<String, Integer> statuses = new HashMap<String, Integer>();
 
     long scans;
     boolean halted;
-    int onErrorIp = -1;
-    boolean inHandler;
+    String haltMessage;
+    /** KMC ERRORLEVEL: non-zero when the previous statement had an error. */
+    int errorLevel;
+    /** The last runtime error that ONERROR / ERRORLEVEL handled, or null. */
+    String handledError;
+    long lastScanMillis = -1;
+    double scanRate;
     int steps;
 
     public void reset() {
@@ -37,10 +44,14 @@ public final class RuntimeState {
         intervals.clear();
         pids.clear();
         console.setLength(0);
+        statuses.clear();
         scans = 0;
         halted = false;
-        onErrorIp = -1;
-        inHandler = false;
+        haltMessage = null;
+        errorLevel = 0;
+        handledError = null;
+        lastScanMillis = -1;
+        scanRate = 0;
         steps = 0;
     }
 
@@ -50,6 +61,16 @@ public final class RuntimeState {
 
     public boolean isHalted() {
         return halted;
+    }
+
+    /** The message from {@code HALT "Message"}, or null. */
+    public String haltMessage() {
+        return haltMessage;
+    }
+
+    /** The last runtime error ONERROR or ERRORLEVEL handled, or null. */
+    public String handledError() {
+        return handledError;
     }
 
     public String console() {

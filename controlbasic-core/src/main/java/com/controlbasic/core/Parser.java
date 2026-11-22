@@ -24,12 +24,14 @@ final class Parser {
         alias("COS-1", "ARCCOS");
         alias("TAN-1", "ARCTAN");
         alias("DEW-POINT", "DEWPOINT");
-        alias("DEW-POINT-SI", "DEWPOINT");
+        alias("DEW-POINT-SI", "DEWPOINTSI");
         alias("ENTHALPY-SI", "ENTHALPYSI");
         alias("LN-1", "INVLN");
         alias("SENSOR-ON", "SENSORON");
         alias("SENSOR-OFF", "SENSOROFF");
         alias("ON-ERROR", "ONERROR");
+        alias("NEG-INFINITY", "NEG_INFINITY");
+        alias("POS-INFINITY", "POS_INFINITY");
     }
 
     private static void alias(String from, String to) {
@@ -158,15 +160,19 @@ final class Parser {
         }
         if (t.type == TokenType.START || t.type == TokenType.ENABLE || t.type == TokenType.OPEN) {
             advance();
-            return new Stmt.SetPoint(parseName(), true, t.line, t.column);
+            return new Stmt.SetPoint(plainName(parseName(), peek()), true, t.line, t.column);
         }
         if (t.type == TokenType.STOP || t.type == TokenType.DISABLE || t.type == TokenType.CLOSE) {
             advance();
-            return new Stmt.SetPoint(parseName(), false, t.line, t.column);
+            return new Stmt.SetPoint(plainName(parseName(), peek()), false, t.line, t.column);
         }
         if (t.type == TokenType.HALT) {
             advance();
-            return new Stmt.Halt(t.line, t.column);
+            String message = null;
+            if (check(TokenType.STRING)) {
+                message = advance().text;
+            }
+            return new Stmt.Halt(message, t.line, t.column);
         }
         if (t.type == TokenType.END) {
             if (checkAt(1, TokenType.IF)) {
@@ -211,6 +217,10 @@ final class Parser {
         }
         if (t.type == TokenType.COV || t.type == TokenType.NETPOINT) {
             throw error(t, t.text.toUpperCase(Locale.ROOT) + " is not supported");
+        }
+        if (t.type == TokenType.IDENT && checkAt(1, TokenType.LPAREN)
+                && ("INC".equalsIgnoreCase(t.text) || "DEC".equalsIgnoreCase(t.text))) {
+            return parseIncDec(t);
         }
         if (t.type == TokenType.IDENT) {
             return parseAssign();
@@ -477,9 +487,46 @@ final class Parser {
         return new Stmt.Declare(kind, names, t.line, t.column);
     }
 
+    /** KMC {@code INC(point[, step])} / {@code DEC(point[, step])}. */
+    private Stmt parseIncDec(Token t) {
+        boolean inc = "INC".equalsIgnoreCase(t.text);
+        advance();
+        advance();
+        Token nameTok = peek();
+        String name = plainName(parseName(), nameTok);
+        Expr step = new Expr.Num(1, t.line, t.column);
+        if (check(TokenType.COMMA)) {
+            advance();
+            step = parseExpr();
+        }
+        if (!check(TokenType.RPAREN)) {
+            throw error(peek(), "Expected )");
+        }
+        advance();
+        Expr value = new Expr.Binary(inc ? TokenType.PLUS : TokenType.MINUS,
+                new Expr.Var(name, nameTok.line, nameTok.column), step, t.line, t.column);
+        return new Stmt.Assign(name, value, nameTok.line, nameTok.column);
+    }
+
+    /** Only {@code .PV} may be written; status flags are read-only. */
+    private String plainName(String name, Token at) {
+        int dot = name.indexOf('.');
+        if (dot < 0) {
+            return name;
+        }
+        String prop = name.substring(dot + 1);
+        if (PointStatus.propertyMask(prop) == -2) {
+            return name.substring(0, dot);
+        }
+        if (PointStatus.propertyMask(prop) == 0) {
+            throw error(at, "Unknown property ." + prop);
+        }
+        throw error(at, "." + prop.toUpperCase(Locale.ROOT) + " is read-only");
+    }
+
     private Stmt parseAssign() {
         Token nameTok = peek();
-        String name = parseName();
+        String name = plainName(parseName(), nameTok);
         if (check(TokenType.LPAREN) || check(TokenType.LBRACK)) {
             Token open = advance();
             Expr index = parseExpr();
@@ -601,12 +648,26 @@ final class Parser {
 
     private Expr parsePow() {
         Expr left = parseNot();
-        if (check(TokenType.CARET)) {
+        // KMC: operators at the same level are evaluated left to right
+        // (Connect Rev N, Hierarchy of operators), so 2 ^ 3 ^ 2 is 64.
+        while (check(TokenType.CARET)) {
             Token op = advance();
-            // Right-associative, and the exponent may carry its own sign: 2 ^ -1.
-            return new Expr.Binary(op.type, left, parseUnary(), op.line, op.column);
+            left = new Expr.Binary(op.type, left, parsePowOperand(), op.line, op.column);
         }
         return left;
+    }
+
+    /** An exponent may carry its own sign: 2 ^ -1. */
+    private Expr parsePowOperand() {
+        if (check(TokenType.MINUS)) {
+            Token op = advance();
+            return new Expr.Unary(TokenType.MINUS, parsePowOperand(), op.line, op.column);
+        }
+        if (check(TokenType.PLUS)) {
+            advance();
+            return parsePowOperand();
+        }
+        return parseNot();
     }
 
     private Expr parseNot() {
@@ -676,6 +737,14 @@ final class Parser {
                 }
                 advance();
                 return new Expr.Index(name, index, nameTok.line, nameTok.column);
+            }
+            int dot = name.indexOf('.');
+            if (dot > 0) {
+                String prop = name.substring(dot + 1);
+                if (PointStatus.propertyMask(prop) == 0) {
+                    throw error(nameTok, "Unknown property ." + prop);
+                }
+                return new Expr.Prop(name.substring(0, dot), prop, nameTok.line, nameTok.column);
             }
             return new Expr.Var(name, nameTok.line, nameTok.column);
         }

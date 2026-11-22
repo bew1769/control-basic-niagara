@@ -53,24 +53,66 @@ public final class ControlBasic {
             return new Scan(null, true, 0);
         }
         state.scans++;
+        long now = state.time.nowMillis();
+        if (state.lastScanMillis >= 0 && now > state.lastScanMillis) {
+            state.scanRate = 1000.0 / (now - state.lastScanMillis);
+        } else {
+            state.scanRate = state.scanIntervalSeconds > 0 ? 1.0 / state.scanIntervalSeconds : 1.0;
+        }
+        state.lastScanMillis = now;
+        state.statuses.clear();
         if (state.points != null) {
             List<SlotSpec> slots = program.slots();
             for (int i = 0; i < slots.size(); i++) {
                 SlotSpec spec = slots.get(i);
-                state.vars.put(spec.canonical, Double.valueOf(state.points.get(spec.canonical)));
+                double value = state.points.get(spec.canonical);
+                if (spec.direction == SlotDirection.INPUT) {
+                    int bits = state.points.status(spec.canonical);
+                    state.statuses.put(spec.canonical, Integer.valueOf(bits));
+                    // KMC: a value that is not available reads as NAN (ISNAN);
+                    // a down (offline) point keeps its last value (Connect Rev N, ISNAN).
+                    if ((bits & PointStatus.NULL) != 0) {
+                        value = Double.NaN;
+                    }
+                }
+                state.vars.put(spec.canonical, Double.valueOf(value));
             }
         }
         Scan result = Runner.execute(program, state, maxInstructions);
-        if (result.error == null && state.points != null) {
-            List<SlotSpec> slots = program.slots();
-            for (int i = 0; i < slots.size(); i++) {
-                SlotSpec spec = slots.get(i);
-                if (spec.direction != SlotDirection.INPUT) {
-                    state.points.set(spec.canonical, state.getVar(spec.canonical));
-                }
-            }
+        if (state.points != null) {
+            writeOutputs(program, state, result);
         }
         return result;
+    }
+
+    /**
+     * After a clean scan every output and variable slot gets its value and the
+     * status ok, or null when the value is NAN. A runtime error leaves the
+     * values alone and marks them fault; a HALT writes the values and marks
+     * them fault, since they will not change again until a reset.
+     */
+    private static void writeOutputs(Compilation program, RuntimeState state, Scan result) {
+        List<SlotSpec> slots = program.slots();
+        for (int i = 0; i < slots.size(); i++) {
+            SlotSpec spec = slots.get(i);
+            if (spec.direction == SlotDirection.INPUT) {
+                continue;
+            }
+            double value = state.getVar(spec.canonical);
+            if (result.error == null) {
+                state.points.set(spec.canonical, value);
+            }
+            state.points.setStatus(spec.canonical, outputStatus(value, result));
+        }
+    }
+
+    /** Status bits an output carries after {@code result}. */
+    public static int outputStatus(double value, Scan result) {
+        int bits = Double.isNaN(value) ? PointStatus.NULL : PointStatus.OK;
+        if (result != null && (result.error != null || result.halted)) {
+            bits |= PointStatus.FAULT;
+        }
+        return bits;
     }
 
     private static Compilation failed(Diagnostic diagnostic) {

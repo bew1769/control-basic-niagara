@@ -17,6 +17,8 @@ moduleManifest {
 dependencies {
     nre(":nre")
     api(":baja")
+    // Fault alarms for compile and runtime errors (AlarmSupport, BAlarmSourceInfo).
+    api(":alarm-rt")
 }
 
 tasks.named<JavaCompile>("compileJava") {

@@ -224,6 +224,15 @@ public final class Lexer {
                     i++;
                     col++;
                 }
+                // KMC object.property syntax (AO8.RD, TL1.EN): keep it one token.
+                if (i + 1 < n && source.charAt(i) == '.' && isIdentStart(source.charAt(i + 1))) {
+                    i++;
+                    col++;
+                    while (i < n && isIdentPart(source.charAt(i))) {
+                        i++;
+                        col++;
+                    }
+                }
                 String text = source.substring(start, i);
                 String upper = text.toUpperCase(Locale.ROOT);
                 TokenType kw = KEYWORDS.get(upper);
